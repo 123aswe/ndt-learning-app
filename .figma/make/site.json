@@ -1,0 +1,10 @@
+{
+  "description": "A modern learning platform for non-destructive testing (NDT) students and professionals, offering interactive quizzes, exam preparation, and personalized study insights.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
