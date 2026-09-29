@@ -12,7 +12,7 @@
 ## 2. 页面地图
 | 页面 | 路径 | 说明 |
 | ---- | ---- | ---- |
-| 引导 Onboarding | src/screens/OnboardingScreen.tsx | 3 步：logo 介绍 / 选检测方向 / 选学习目标 |
+| 引导 Onboarding | src/screens/OnboardingScreen.tsx | 3 步：logo 介绍 / 选检测方向 / 选学习目标；本页专用配色：奶油米白 #F6F4EE 背景 + 薄荷青 #3BB4A2 品牌 + slate-900/500 文字（不改全局令牌） |
 | 登录注册 Login | src/screens/LoginScreen.tsx | 品牌头 + Slogan + 毛玻璃卡片（验证码登录 / 账号登录双模式）+ 快捷登录 + 隐私勾选；演示账号 admin / admin123；成功回调 onSuccess 进主界面 |
 | 首页 Home | src/screens/HomeScreen.tsx | 问候、今日进度环、快捷入口、统计卡、周趋势、推荐训练、最近错题、成就 |
 | 题库分类 QuestionBank | src/screens/QuestionBankScreen.tsx | 搜索、分类 Tab、检测方法卡片、训练集列表、筛选面板 |
@@ -73,6 +73,7 @@
 ## 8. 变更历史
 | 日期 | 变更 | 模块 |
 | ---- | ---- | ---- |
+| 2026-09-29 | 引导页 UI 重构（仅本页）：奶油米白 #F6F4EE 背景 + 薄荷青 #3BB4A2 品牌色 + slate 文字；步骤 0 改为垂直 3 张白底大圆角功能卡（青绿图标+标题+说明）、胶囊主按钮（同色弥散阴影）+ 跳过；步骤 1/2 白卡片、青绿选中态、底部胶囊 CTA 同风格统一；步骤逻辑与数据结构不变 | OnboardingScreen |
 | 2026-09-29 | 新增登录注册页（阶段一界面）：slate-50 渐变浅灰底 + 毛玻璃卡片，薄荷绿发光 Logo，M3 输入框（获焦双色边框），青绿渐变主按钮（hover:opacity-90），微信/Apple 快捷登录，隐私协议勾选；双模式（验证码登录 / 账号登录），演示账号 admin / admin123 Mock 校验；App 流程改为 引导→登录→主界面 | LoginScreen / App.tsx |
 | 2026-09-29 | 全 App 深色玻璃拟态 → 苹果式浅色极简重构（背景/文字/辅助色/卡片/图标/图表全面替换，删除 WaveformBg 装饰） | 全部前端 |
 | 2026-09-29 | 底部导航栏改为透明液态玻璃（Liquid Glass）：半透明白 + backdrop blur + 玻璃高光边缘 + 克制的光泽漂移动画（index.css `.nav-liquid` / `.glass-nav` 升级） | BottomNav / index.css |
