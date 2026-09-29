@@ -16,11 +16,11 @@ interface OnboardingScreenProps {
   onComplete: (selectedMethods: NDTMethod[], goal: string) => void
 }
 
-/* 品牌 Logo：官方 App 图标（白色圆角底 + 波形/闪电/弧线/人物剪影）+ 薄荷青同色弥散柔光 */
+/* 品牌 Logo：官方 App 图标原图 + 薄荷青同色弥散柔光（图标按原始比例显示） */
 function BrandLogo() {
   return (
     <div
-      className="flex h-16 w-16 items-center justify-center rounded-[20px]"
+      className="flex h-16 items-center justify-center rounded-[20px]"
       style={{ boxShadow: '0 12px 28px rgba(59,180,162,0.25)' }}
     >
       <BrandIcon size={64} />

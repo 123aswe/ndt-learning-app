@@ -15,11 +15,11 @@ interface LoginScreenProps {
 
 type LoginMode = 'code' | 'password'
 
-/* ── 品牌 Logo（官方 App 图标 + 薄荷绿微发光，与引导页一致） ── */
+/* ── 品牌 Logo（官方 App 图标原图 + 薄荷绿微发光，与引导页一致） ── */
 function BrandLogo() {
   return (
     <div
-      className="flex h-16 w-16 items-center justify-center rounded-[20px]"
+      className="flex h-16 items-center justify-center rounded-[20px]"
       style={{ boxShadow: '0 10px 30px rgba(16, 185, 129, 0.25)' }}
     >
       <BrandIcon size={64} />
