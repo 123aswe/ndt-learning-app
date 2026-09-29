@@ -463,6 +463,15 @@ body::before {
   overscroll-behavior: contain;
 }
 
+/* ============================================================
+   安全区适配（刘海屏 / 底部横条）
+   真机上 env() 返回实际 inset，桌面浏览器为 0，不影响现有布局。
+   用法：页面外壳加 safe-top safe-bottom；fixed 底栏加 safe-bottom。
+   ============================================================ */
+
+.safe-top    { padding-top: env(safe-area-inset-top, 0px); }
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
 /* 进度条动画 */
 .progress-fill { transition: width 0.7s cubic-bezier(0.22, 1, 0.36, 1); }
 

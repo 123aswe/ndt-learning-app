@@ -22,7 +22,7 @@ const tabs: Array<{ id: Tab; label: string; icon: (active: boolean) => React.Rea
 export function BottomNav({ activeTab, onChange }: BottomNavProps) {
   return (
     <div
-      className="fixed bottom-0 left-1/2 -translate-x-1/2 z-50"
+      className="safe-bottom fixed bottom-0 left-1/2 -translate-x-1/2 z-50"
       style={{ width: '100%', maxWidth: 430 }}
     >
       {/* 悬浮胶囊：居中、收窄、略抬离底部 */}

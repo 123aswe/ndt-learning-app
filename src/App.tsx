@@ -191,7 +191,7 @@ export default function App() {
 
   if (view.name === 'onboarding') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <OnboardingScreen onComplete={() => setView({ name: 'login' })} />
         </div>
@@ -201,7 +201,7 @@ export default function App() {
 
   if (view.name === 'login') {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
         <div className="app-shell">
           <LoginScreen onSuccess={() => goMain('home')} />
         </div>
@@ -211,7 +211,7 @@ export default function App() {
 
   if (view.name === 'practice') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <PracticeScreen
             categoryId={view.categoryId}
@@ -225,7 +225,7 @@ export default function App() {
 
   if (view.name === 'practice-result') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <PracticeResultScreen
             correct={view.correct}
@@ -243,7 +243,7 @@ export default function App() {
 
   if (view.name === 'exam-setup') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <ExamSetupStub onBack={() => goMain('home')} />
         </div>
@@ -253,7 +253,7 @@ export default function App() {
 
   if (view.name === 'search') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <PlaceholderScreen title="搜索" icon={<SearchIcon size={30} />} onBack={() => goMain('home')} />
         </div>
@@ -263,7 +263,7 @@ export default function App() {
 
   if (view.name === 'notifications') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <PlaceholderScreen title="通知中心" icon={<BellIcon size={30} />} onBack={() => goMain('home')} />
         </div>
@@ -273,7 +273,7 @@ export default function App() {
 
   if (view.name === 'achievements') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <PlaceholderScreen title="成就系统" icon={<AwardIcon size={30} />} onBack={() => goMain('profile')} />
         </div>
@@ -283,7 +283,7 @@ export default function App() {
 
   if (view.name === 'settings') {
     return (
-      <div className="min-h-screen bg-page flex items-center justify-center">
+      <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
           <PlaceholderScreen title="设置" icon={<GearIcon size={30} />} onBack={() => goMain('profile')} />
         </div>
@@ -293,7 +293,7 @@ export default function App() {
 
   /* ── 主 Tab 布局 ── */
   return (
-    <div className="min-h-screen bg-page flex items-center justify-center">
+    <div className="safe-top safe-bottom min-h-screen bg-page flex items-center justify-center">
       <div className="app-shell relative">
         <div className="w-full" key={activeTab}>
           {activeTab === 'home' && (
