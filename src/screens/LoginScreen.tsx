@@ -309,6 +309,11 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             >《隐私政策》</button>
           </span>
         </label>
+
+        {/* 注册说明 */}
+        <p className="mt-4 text-center text-xs leading-relaxed text-slate-400">
+          注册功能暂时不开放，如需注册请添加管理员联系方式：2923614426，给您带来不便，敬请谅解！
+        </p>
       </div>
 
       {/* 底部 Toast */}
