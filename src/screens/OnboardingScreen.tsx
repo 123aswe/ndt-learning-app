@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 import { ClipboardIcon, StarIcon, ZapIcon, AwardIcon, BookIcon, WrenchIcon, CheckIcon } from '../components/icons'
+import { BrandIcon } from '../components/BrandIcon'
 import type { NDTMethod } from '../types'
 
 /* ============================================================
@@ -15,18 +16,14 @@ interface OnboardingScreenProps {
   onComplete: (selectedMethods: NDTMethod[], goal: string) => void
 }
 
-/* 品牌 Logo：青绿圆角矩形 + 内嵌白色 NDT 字母 + 同色弥散发光 */
+/* 品牌 Logo：官方 App 图标（白色圆角底 + 波形/闪电/弧线/人物剪影）+ 薄荷青同色弥散柔光 */
 function BrandLogo() {
   return (
     <div
-      className="flex h-16 w-16 items-center justify-center rounded-[20px] bg-[#3BB4A2]"
-      style={{ boxShadow: '0 12px 28px rgba(59,180,162,0.38), inset 0 1px 0 rgba(255,255,255,0.45)' }}
+      className="flex h-16 w-16 items-center justify-center rounded-[20px]"
+      style={{ boxShadow: '0 12px 28px rgba(59,180,162,0.25)' }}
     >
-      <svg width="40" height="40" viewBox="0 0 44 44" fill="none" aria-hidden="true">
-        <text x="22" y="29" textAnchor="middle" fontFamily="'Inter', sans-serif" fontSize="15" fontWeight="800" fill="#fff">
-          NDT
-        </text>
-      </svg>
+      <BrandIcon size={64} />
     </div>
   )
 }

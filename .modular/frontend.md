@@ -26,6 +26,7 @@
 ## 3. 组件索引
 | 组件 | 路径 | 用途 | 使用方 |
 | ---- | ---- | ---- | ---- |
+| BrandIcon | src/components/BrandIcon.tsx | 品牌 App 图标（白色圆角底+蓝青波形线+金色闪电+橙色U弧+人物剪影），按官方图标资产包重绘 | Onboarding / Login |
 | BottomNav | src/components/BottomNav.tsx | 底部 5 Tab 导航 | App |
 | Button / IconButton | src/components/Button.tsx | 通用按钮 | 各页面 |
 | GlassCard / GradientCard | src/components/GlassCard.tsx | 卡片容器（现为浅色卡片） | Home/QuestionBank/Wrong/Learning/Profile |
@@ -50,7 +51,7 @@
 | 微信 / Apple 快捷登录 | Login | Toast「暂未接入」 |
 
 ## 5. 图片/素材索引
-无外部图片；图标全部为内联 SVG。微信 / Apple 品牌图标为 LoginScreen 内本地定义（不放入 icons.tsx，避免破坏线性图标风格统一）。
+无外部图片；图标全部为内联 SVG。品牌 App 图标 = `components/BrandIcon.tsx`（引导页/登录页共用）；微信 / Apple 品牌图标为 LoginScreen 内本地定义（不放入 icons.tsx，避免破坏线性图标风格统一）。
 
 ## 6. 数据字段索引（前端使用）
 | 字段 | 类型 | 来源 | 使用页面 |
@@ -73,6 +74,7 @@
 ## 8. 变更历史
 | 日期 | 变更 | 模块 |
 | ---- | ---- | ---- |
+| 2026-09-29 | 品牌 App 图标适配：新增 BrandIcon 组件（按用户提供的官方图标资产包重绘：白色圆角底 + 蓝青渐变波形线 + 金色闪电 + 橙色U弧 + 浅橙人物剪影），引导页与登录页品牌 Logo 统一替换，其余布局/配色不动 | BrandIcon / OnboardingScreen / LoginScreen |
 | 2026-09-29 | 引导页 UI 重构（仅本页）：奶油米白 #F6F4EE 背景 + 薄荷青 #3BB4A2 品牌色 + slate 文字；步骤 0 改为垂直 3 张白底大圆角功能卡（青绿图标+标题+说明）、胶囊主按钮（同色弥散阴影）+ 跳过；步骤 1/2 白卡片、青绿选中态、底部胶囊 CTA 同风格统一；步骤逻辑与数据结构不变 | OnboardingScreen |
 | 2026-09-29 | 新增登录注册页（阶段一界面）：slate-50 渐变浅灰底 + 毛玻璃卡片，薄荷绿发光 Logo，M3 输入框（获焦双色边框），青绿渐变主按钮（hover:opacity-90），微信/Apple 快捷登录，隐私协议勾选；双模式（验证码登录 / 账号登录），演示账号 admin / admin123 Mock 校验；App 流程改为 引导→登录→主界面 | LoginScreen / App.tsx |
 | 2026-09-29 | 全 App 深色玻璃拟态 → 苹果式浅色极简重构（背景/文字/辅助色/卡片/图标/图表全面替换，删除 WaveformBg 装饰） | 全部前端 |

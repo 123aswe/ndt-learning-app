@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react'
+import { BrandIcon } from '../components/BrandIcon'
 
 /* ============================================================
    登录 / 注册页（iOS 极简 × Material Design 3）
@@ -14,20 +15,14 @@ interface LoginScreenProps {
 
 type LoginMode = 'code' | 'password'
 
-/* ── 品牌 Logo（与引导页一致的 N 字标，薄荷绿圆角方块 + 微发光） ── */
+/* ── 品牌 Logo（官方 App 图标 + 薄荷绿微发光，与引导页一致） ── */
 function BrandLogo() {
   return (
     <div
       className="flex h-16 w-16 items-center justify-center rounded-[20px]"
-      style={{
-        background: 'linear-gradient(135deg, #6EE7B7 0%, #2DD4BF 100%)',
-        boxShadow: '0 10px 30px rgba(16, 185, 129, 0.32), inset 0 1px 0 rgba(255,255,255,0.55)',
-      }}
+      style={{ boxShadow: '0 10px 30px rgba(16, 185, 129, 0.25)' }}
     >
-      <svg width="34" height="34" viewBox="0 0 44 44" fill="none" aria-hidden="true">
-        <text x="2" y="26" fontFamily="'Inter', sans-serif" fontSize="18" fontWeight="800" fill="#fff">N</text>
-        <path d="M24,10 L24,26 L28,16 L32,24 L36,14 L36,30" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="none" opacity="0.9" />
-      </svg>
+      <BrandIcon size={64} />
     </div>
   )
 }
