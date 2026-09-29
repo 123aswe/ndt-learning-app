@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react'
 import { BottomNav } from './components/BottomNav'
 import { OnboardingScreen } from './screens/OnboardingScreen'
+import { LoginScreen } from './screens/LoginScreen'
 import { HomeScreen } from './screens/HomeScreen'
 import { QuestionBankScreen } from './screens/QuestionBankScreen'
 import { PracticeScreen } from './screens/PracticeScreen'
@@ -13,6 +14,7 @@ import type { Screen, Tab } from './types'
 
 type AppView =
   | { name: 'onboarding' }
+  | { name: 'login' }
   | { name: 'main'; tab: Tab }
   | { name: 'practice'; categoryId: string }
   | { name: 'practice-result'; correct: number; total: number; timeSeconds: number; categoryId: string }
@@ -191,7 +193,17 @@ export default function App() {
     return (
       <div className="min-h-screen bg-page flex items-center justify-center">
         <div className="app-shell">
-          <OnboardingScreen onComplete={() => goMain('home')} />
+          <OnboardingScreen onComplete={() => setView({ name: 'login' })} />
+        </div>
+      </div>
+    )
+  }
+
+  if (view.name === 'login') {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100 flex items-center justify-center">
+        <div className="app-shell">
+          <LoginScreen onSuccess={() => goMain('home')} />
         </div>
       </div>
     )

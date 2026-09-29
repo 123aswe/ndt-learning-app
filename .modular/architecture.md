@@ -2,7 +2,7 @@
 
 ## 应用形态
 - 移动端优先的刷题应用（`app-shell` 最大宽 430px 居中），单页 React，无路由库
-- App.tsx 用 `view` 状态机控制：`onboarding / main(tab) / practice / practice-result / exam-setup / search / notifications / achievements / settings`
+- App.tsx 用 `view` 状态机控制：`onboarding / login / main(tab) / practice / practice-result / exam-setup / search / notifications / achievements / settings`
 
 ## 目录结构
 ```
@@ -20,6 +20,7 @@ src/
     icons.tsx         极简线性图标库（stroke 统一，供各页面复用）
   screens/
     OnboardingScreen.tsx       引导（logo/选择方向/选择目标）
+    LoginScreen.tsx            登录注册（品牌头/双模式表单/快捷登录/隐私勾选）
     HomeScreen.tsx             首页（进度卡片/快捷入口/趋势/训练/错题/成就）
     QuestionBankScreen.tsx     题库分类（搜索/分类 Tab/分类卡片/训练集/筛选面板）
     PracticeScreen.tsx         答题页（题目/选项/解析/退出弹窗）

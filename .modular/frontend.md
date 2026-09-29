@@ -13,6 +13,7 @@
 | 页面 | 路径 | 说明 |
 | ---- | ---- | ---- |
 | 引导 Onboarding | src/screens/OnboardingScreen.tsx | 3 步：logo 介绍 / 选检测方向 / 选学习目标 |
+| 登录注册 Login | src/screens/LoginScreen.tsx | 品牌头 + Slogan + 毛玻璃卡片（验证码登录 / 账号登录双模式）+ 快捷登录 + 隐私勾选；演示账号 admin / admin123；成功回调 onSuccess 进主界面 |
 | 首页 Home | src/screens/HomeScreen.tsx | 问候、今日进度环、快捷入口、统计卡、周趋势、推荐训练、最近错题、成就 |
 | 题库分类 QuestionBank | src/screens/QuestionBankScreen.tsx | 搜索、分类 Tab、检测方法卡片、训练集列表、筛选面板 |
 | 答题 Practice | src/screens/PracticeScreen.tsx | 题目卡片、选项卡片（对/错状态）、解析面板、退出弹窗 |
@@ -42,10 +43,14 @@
 | 选项卡片 | Practice | 选中判对错 → 显示解析 |
 | 下一题 / 查看结果 | Practice | 推进 or onComplete |
 | 再练/复习错题/返回首页 | PracticeResult | onRetry / onReviewWrong / onHome |
-| 开始练习 | Onboarding | onComplete(方向, 目标) |
+| 开始练习 | Onboarding | onComplete(方向, 目标) → 进入登录页 |
+| 登录/注册提交 | Login | 校验后 onSuccess → 主界面 |
+| 模式切换（验证码/账号） | Login | 切换表单字段 |
+| 获取验证码 | Login | Mock 发送（演示码 123456）+ 60s 倒计时 |
+| 微信 / Apple 快捷登录 | Login | Toast「暂未接入」 |
 
 ## 5. 图片/素材索引
-无外部图片；图标全部为 `icons.tsx` 内联 SVG；头像为文字首字圆形徽章。
+无外部图片；图标全部为内联 SVG。微信 / Apple 品牌图标为 LoginScreen 内本地定义（不放入 icons.tsx，避免破坏线性图标风格统一）。
 
 ## 6. 数据字段索引（前端使用）
 | 字段 | 类型 | 来源 | 使用页面 |
@@ -68,6 +73,7 @@
 ## 8. 变更历史
 | 日期 | 变更 | 模块 |
 | ---- | ---- | ---- |
+| 2026-09-29 | 新增登录注册页（阶段一界面）：slate-50 渐变浅灰底 + 毛玻璃卡片，薄荷绿发光 Logo，M3 输入框（获焦双色边框），青绿渐变主按钮（hover:opacity-90），微信/Apple 快捷登录，隐私协议勾选；双模式（验证码登录 / 账号登录），演示账号 admin / admin123 Mock 校验；App 流程改为 引导→登录→主界面 | LoginScreen / App.tsx |
 | 2026-09-29 | 全 App 深色玻璃拟态 → 苹果式浅色极简重构（背景/文字/辅助色/卡片/图标/图表全面替换，删除 WaveformBg 装饰） | 全部前端 |
 | 2026-09-29 | 底部导航栏改为透明液态玻璃（Liquid Glass）：半透明白 + backdrop blur + 玻璃高光边缘 + 克制的光泽漂移动画（index.css `.nav-liquid` / `.glass-nav` 升级） | BottomNav / index.css |
 | 2026-09-29 | 磨砂玻璃质感升级：body 柔和渐变背景（左下低饱和绿→右上暖琥珀金）+ 六边形极淡纹理；卡片全面磨砂玻璃化（`.card`/`.glass*`/`.glass-panel`）；英雄卡内部柔光 `.glass-glow`；进度环渐变+冷光 `.ring-glow`；首页数据改三块凸起子面板（正确/正确率/学习时长带图标）；连续打卡火焰精细版+轻闪烁；导航激活图标轻浮起+微阴影 | 全部前端 / HomeScreen / index.css |
