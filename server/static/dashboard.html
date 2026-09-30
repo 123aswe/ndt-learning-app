@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理后台 · NDT-劳人</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 管理后台主界面：五个 Tab（管理员账号 / 注册申请 / 考生账号 / 密码重置 / 通知管理），各自增删查改 -->
+  <div class="topbar">
+    <h1>NDT-劳人 管理后台</h1>
+    <span id="mode-pill" class="mode-pill">读取中…</span>
+    <div class="spacer"></div>
+    <span class="who" id="who"></span>
+    <button class="btn btn-sm" id="btn-change-pwd">修改我的密码</button>
+    <button class="btn btn-sm" id="btn-logout">退出登录</button>
+  </div>
+
+  <div class="wrap">
+    <!-- 顶部提示（腾讯云短信未配置 / 有待审核注册申请） -->
+    <div id="mode-alert" class="alert alert-warn hidden"></div>
+    <div id="pending-alert" class="alert alert-info hidden"></div>
+
+    <!-- 统计 -->
+    <div class="stats" id="stats"></div>
+
+    <!-- Tab -->
+    <div class="tabs" style="margin-top: 22px;">
+      <button class="tab active" data-panel="admins">管理员账号</button>
+      <button class="tab" data-panel="registrations">注册申请 <span id="pending-dot" class="badge badge-err hidden">0</span></button>
+      <button class="tab" data-panel="users">考生账号</button>
+      <button class="tab" data-panel="resets">密码重置 <span id="reset-dot" class="badge badge-warn hidden">0</span></button>
+      <button class="tab" data-panel="notifications">通知管理</button>
+      <button class="tab" data-panel="questionsets">题库管理</button>
+      <button class="tab" data-panel="materials">资料库</button>
+      <button class="tab" data-panel="reports">纠错工单 <span id="report-dot" class="badge badge-err hidden">0</span></button>
+    </div>
+
+    <!-- 面板：管理员账号 -->
+    <section id="panel-admins">
+      <div class="card">
+        <h2 class="card-title">管理员账号</h2>
+        <p class="card-sub">管理后台的登录账号。改密码、禁用、删除都会让该账号已登录的会话立即失效。</p>
+
+        <div class="toolbar">
+          <input class="input" id="admins-q" placeholder="搜索账号 / 姓名 / 备注" />
+          <select class="input" id="admins-status">
+            <option value="">全部状态</option>
+            <option value="1">已启用</option>
+            <option value="0">已禁用</option>
+          </select>
+          <button class="btn" id="admins-search">搜索</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="admins-create">+ 新增管理员</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>账号</th><th>姓名</th><th>角色</th><th>状态</th>
+                <th>最近登录</th><th>创建时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="admins-body"></tbody>
+          </table>
+          <div class="empty hidden" id="admins-empty">没有匹配的管理员</div>
+        </div>
+
+        <div class="pager">
+          <span id="admins-count"></span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="admins-prev">上一页</button>
+          <span id="admins-page"></span>
+          <button class="btn btn-sm" id="admins-next">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：注册申请 -->
+    <section id="panel-registrations" class="hidden">
+      <div class="card">
+        <h2 class="card-title">注册申请</h2>
+        <p class="card-sub">
+          考生在 App 登录页「注册」提交的申请会出现在这里。<strong>只有审核通过后</strong>，系统才会为 TA 建立考生账号，该考生也才能用「账号 + 密码」登录。
+        </p>
+
+        <div class="toolbar">
+          <input class="input" id="regs-q" placeholder="搜索账号 / 单位学校" />
+          <select class="input" id="regs-status">
+            <option value="">全部状态</option>
+            <option value="pending">待审核</option>
+            <option value="approved">已通过</option>
+            <option value="rejected">已拒绝</option>
+          </select>
+          <button class="btn" id="regs-search">搜索</button>
+          <div class="spacer"></div>
+          <span class="card-sub" style="margin: 0;" id="regs-summary"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>申请账号</th><th>单位 / 学校</th><th>状态</th>
+                <th>提交时间</th><th>审核人</th><th>审核时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="regs-body"></tbody>
+          </table>
+          <div class="empty hidden" id="regs-empty">暂时没有注册申请</div>
+        </div>
+
+        <div class="pager">
+          <span id="regs-count"></span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="regs-prev">上一页</button>
+          <span id="regs-page"></span>
+          <button class="btn btn-sm" id="regs-next">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：考生账号 -->
+    <section id="panel-users" class="hidden">
+      <div class="card">
+        <h2 class="card-title">考生账号</h2>
+        <p class="card-sub">
+          考生的登录名是自定义<strong>账号</strong>。通常由「注册申请 → 审核通过」自动建号，也可在此手动开号或后续维护（改密码 / 禁用 / 删除）。
+        </p>
+
+        <div class="toolbar">
+          <input class="input" id="users-q" placeholder="搜索账号 / 昵称 / 姓名 / 单位学校" />
+          <select class="input" id="users-status">
+            <option value="">全部状态</option>
+            <option value="1">已启用</option>
+            <option value="0">已禁用</option>
+          </select>
+          <select class="input" id="users-method">
+            <option value="">全部方向</option>
+            <option value="UT">UT</option>
+            <option value="RT">RT</option>
+            <option value="MT">MT</option>
+            <option value="PT">PT</option>
+            <option value="ET">ET</option>
+            <option value="VT">VT</option>
+            <option value="综合">综合</option>
+          </select>
+          <button class="btn" id="users-search">搜索</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="users-create">+ 新增考生</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>账号</th><th>单位 / 学校</th><th>头像 / 昵称</th><th>姓名</th><th>方向</th>
+                <th>状态</th><th>最近登录</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="users-body"></tbody>
+          </table>
+          <div class="empty hidden" id="users-empty">没有匹配的考生</div>
+        </div>
+
+        <div class="pager">
+          <span id="users-count"></span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="users-prev">上一页</button>
+          <span id="users-page"></span>
+          <button class="btn btn-sm" id="users-next">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：密码重置工单（考生自助申请 → 管理员处理并发送新密码） -->
+    <section id="panel-resets" class="hidden">
+      <div class="card">
+        <h2 class="card-title">密码重置工单</h2>
+        <p class="card-sub">
+          考生在 App「设置 → 账号安全 → 忘记密码」或登录页提交的申请会出现在这里。
+          点<strong>处理</strong>时系统会重置该考生的登录密码，并把新密码以<strong>系统通知</strong>发到 TA 的 App 通知中心
+          （系统通知考生<strong>不可删除</strong>）。
+        </p>
+
+        <div class="toolbar">
+          <input class="input" id="resets-q" placeholder="搜索账号 / 邮箱" />
+          <select class="input" id="resets-status">
+            <option value="">全部状态</option>
+            <option value="pending">待处理</option>
+            <option value="done">已处理</option>
+            <option value="rejected">已拒绝</option>
+          </select>
+          <button class="btn" id="resets-search">搜索</button>
+          <div class="spacer"></div>
+          <span class="card-sub" style="margin: 0;" id="resets-summary"></span>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>申请账号</th><th>邮箱</th><th>状态</th>
+                <th>提交时间</th><th>处理人</th><th>处理时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="resets-body"></tbody>
+          </table>
+          <div class="empty hidden" id="resets-empty">暂时没有密码重置申请</div>
+        </div>
+
+        <div class="pager">
+          <span id="resets-count"></span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="resets-prev">上一页</button>
+          <span id="resets-page"></span>
+          <button class="btn btn-sm" id="resets-next">下一页</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：通知管理（发送通知 + 已发送记录） -->
+    <section id="panel-notifications" class="hidden">
+      <div class="card">
+        <h2 class="card-title">发送通知</h2>
+        <p class="card-sub">
+          可以发给<strong>全部考生</strong>或<strong>指定考生</strong>（搜索已注册账号多选，同一个账号只会收到一条）。
+          通知类型由你设置：<strong>系统通知</strong>考生不可删除（适合发新密码、重要公告），
+          <strong>普通通知</strong>考生可自行删除。
+        </p>
+
+        <div class="form-row">
+          <label>接收对象</label>
+          <div class="radio-row" id="notify-target-row">
+            <button type="button" class="radio-chip on" data-target="all">全部考生</button>
+            <button type="button" class="radio-chip" data-target="one">指定考生</button>
+          </div>
+          <div class="hint" id="notify-target-hint">将发送给当前所有启用的考生账号</div>
+        </div>
+
+        <div class="form-row hidden" id="notify-recipient-row">
+          <label>指定考生</label>
+          <div class="picker">
+            <div class="picker-picked" id="notify-picked"></div>
+            <div class="picker-search">
+              <input class="input" id="notify-account-q" autocomplete="off"
+                     placeholder="输入账号 / 昵称 / 单位学校搜索已注册考生" />
+              <button class="btn" id="notify-account-search" type="button">搜索</button>
+            </div>
+            <div class="picker-list" id="notify-candidates"></div>
+          </div>
+          <div class="hint" id="notify-recipient-hint">
+            从下方搜索结果里点「添加」选择接收考生；同一个账号只能添加一次
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>通知类型</label>
+          <select class="input" id="notify-type">
+            <option value="system">系统通知（考生不可删除）</option>
+            <option value="notice">普通通知（考生可删除）</option>
+          </select>
+        </div>
+
+        <div class="form-row">
+          <label>标题</label>
+          <input class="input" id="notify-title" maxlength="40" placeholder="例如：密码重置成功" />
+        </div>
+
+        <div class="form-row">
+          <label>内容</label>
+          <textarea class="input" id="notify-content" placeholder="通知正文，可换行；发新密码时直接写在正文里"></textarea>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn btn-primary" id="notify-send">发送通知</button>
+          <button class="btn" id="notify-clear">清空</button>
+          <div class="spacer"></div>
+          <span class="card-sub" style="margin: 0;" id="notify-result"></span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">已发送记录</h2>
+        <p class="card-sub">最近发送的通知（同一次发送计为一条记录）。删除记录不会影响考生已收到的通知。</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>类型</th><th>接收对象</th><th>标题</th><th>内容</th><th>发送人</th><th>发送时间</th><th>操作</th></tr>
+            </thead>
+            <tbody id="notifies-body"></tbody>
+          </table>
+          <div class="empty hidden" id="notifies-empty">还没有发送过通知</div>
+        </div>
+        <div class="pager">
+          <span id="notifies-count"></span>
+          <div class="spacer"></div>
+          <button class="btn btn-sm" id="notifies-refresh">刷新</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：题库管理（自定义题库：建库 → 按题型放题 → 考生端动态获取） -->
+    <section id="panel-questionsets" class="hidden">
+      <div class="card">
+        <h2 class="card-title">题库管理</h2>
+        <p class="card-sub">
+          在这里创建题库（如「二级 UT 题库」）并上传题目，题目按<strong>选择题 / 判断题 / 计算题 / 简答题</strong>分类。
+          保存后考生端 App「题库」页会动态出现这套题库；内置一级题库（UT / RT / MT / PT）不受影响。
+        </p>
+
+        <div class="toolbar">
+          <button class="btn" id="qs-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="qs-create">+ 新建题库</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>题库名称</th><th>级别</th><th>题数</th><th>题型分布</th>
+                <th>创建时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="qs-body"></tbody>
+          </table>
+          <div class="empty hidden" id="qs-empty">还没有自定义题库，点右上角「新建题库」创建</div>
+        </div>
+        <p class="card-sub" style="margin-top:10px;">内置一级题库（UT / RT / MT / PT）也在列表里：可查看题目、增删改题、批量导入；题库本身不可改名或删除。</p>
+      </div>
+    </section>
+
+    <!-- 面板：资料库（标准/教材/资料/视频：上传 → 考生端「教材 / 视频」页动态获取） -->
+    <section id="panel-materials" class="hidden">
+      <div class="card">
+        <h2 class="card-title">资料库</h2>
+        <p class="card-sub">
+          在这里上传<strong>标准规范 / 教材 / 辅导资料 / 视频课程</strong>，保存后考生端 App「教材 / 视频」页会动态出现。
+          文件保存在服务器 data/uploads/ 目录，标题与分类信息保存在数据库。<br />
+          上传时可<strong>指定封面图</strong>（jpg / png / webp，≤8MB）；不指定的话，视频在考生端会自动取<strong>首帧</strong>作为封面。
+          列表里的<strong>播放量 / 收藏数 / 评论数</strong>来自考生端真实行为，点「评论」可查看并删除违规评论。
+        </p>
+
+        <div class="toolbar">
+          <select class="input" id="mats-category">
+            <option value="">全部分类</option>
+            <option value="standard">标准规范</option>
+            <option value="textbook">教材</option>
+            <option value="material">辅导资料</option>
+            <option value="video">视频课程</option>
+          </select>
+          <input class="input" id="mats-q" placeholder="搜索标题 / 描述" />
+          <button class="btn" id="mats-search">搜索</button>
+          <button class="btn" id="mats-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="mats-upload">+ 上传资料</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>标题</th><th>分类</th><th>方向</th><th>封面</th><th>文件</th><th>大小</th>
+                <th>播放量</th><th>收藏数</th><th>评论</th><th>上传时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="mats-body"></tbody>
+          </table>
+          <div class="empty hidden" id="mats-empty">还没有资料，点右上角「上传资料」</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：纠错工单（考生上报「答案疑似有误」→ 采纳/忽略/删除） -->
+    <section id="panel-reports" class="hidden">
+      <div class="card">
+        <h2 class="card-title">题目纠错工单</h2>
+        <p class="card-sub">
+          考生在练习中对题目答案有疑问时提交：包含完整题目、考生认为的正确答案和理由。
+          「采纳」会直接把题库里的正确答案改成考生建议的答案；也可以点「编辑题目」做任意修改。
+        </p>
+
+        <div class="toolbar">
+          <select class="input" id="rep-status">
+            <option value="pending">待处理</option>
+            <option value="resolved">已处理</option>
+            <option value="dismissed">已忽略</option>
+            <option value="all">全部</option>
+          </select>
+          <div class="spacer"></div>
+          <button class="btn" id="rep-refresh">刷新</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th><th>题目（现答案）</th><th>考生建议答案</th><th>理由 / 上报人</th>
+                <th>时间</th><th>状态</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="rep-body"></tbody>
+          </table>
+          <div class="empty hidden" id="rep-empty">没有工单</div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- 弹窗容器（表单由 dashboard.js 动态渲染） -->
+  <div id="modal-root"></div>
+
+  <script src="api.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>

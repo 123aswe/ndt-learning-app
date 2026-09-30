@@ -6,6 +6,10 @@
    NDT-劳人 · Design System
    苹果式浅色极简 · Light Minimal
    令牌集中在下方 @theme 与 :root，改色只改这里。
+   ── 主题切换 ──
+   html[data-theme="light" | "dark"] 由 src/theme.ts 写入；
+   「跟随系统」时 theme.ts 监听 prefers-color-scheme 并同步该属性。
+   深色配色一律在文件末尾的 [data-theme='dark'] 段里覆盖，不要在各组件里写死颜色。
    ============================================================ */
 
 @theme {
@@ -38,6 +42,7 @@
   --text-2: #5F6670;
   --text-3: #9AA1A9;
   --line: #E6E8EB;
+  --line-strong: #D6D9DD;
   --accent: #5F8D8C;
   --accent-weak: rgba(95, 141, 140, 0.10);
   --accent-border: rgba(95, 141, 140, 0.30);
@@ -52,6 +57,20 @@
   --glass-bg: linear-gradient(165deg, rgba(255,255,255,0.82) 0%, rgba(255,255,255,0.58) 55%, rgba(255,255,255,0.66) 100%);
   --glass-border: rgba(255,255,255,0.80);
   --glass-shadow: 0 1px 2px rgba(27,30,35,0.04), 0 6px 20px rgba(27,30,35,0.07), inset 0 1px 0 rgba(255,255,255,0.92);
+
+  /* ── 语义面 / 组件用色（浅色值）──
+     组件里一律引用这些令牌，深色模式只需在末尾覆盖同名令牌 */
+  --surface-raised: #FFFFFF;                     /* 弹层 / 需要实体底的浮层 */
+  --surface-translucent: rgba(255,255,255,0.72); /* 半透明卡片（登录、引导页） */
+  --field-bg: rgba(241,243,245,0.85);            /* 输入框 / 分段控件底 */
+  --track: #EDEFF2;                              /* 进度条轨道 / 占位底 */
+  --hairline: #D9DCE0;                           /* 弹层把手 / 开关未选中 */
+  --chip-bg: rgba(255,255,255,0.78);             /* 小圆钮底（返回键等） */
+  --chip-bg-soft: rgba(255,255,255,0.68);        /* 次级小面板底 */
+  --chip-border: rgba(255,255,255,0.75);         /* 玻璃描边 */
+  --inset-hi: rgba(255,255,255,0.72);            /* 玻璃内高光 */
+  --accent-fill: rgba(95,141,140,0.90);          /* 实心主色按钮底（配白字） */
+  --on-accent: #FFFFFF;                          /* 实心主色上的文字 */
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -425,6 +444,9 @@ body::before {
   0%, 100% { opacity: 0.35; }
   50% { opacity: 0.9; }
 }
+@keyframes spin { to { transform: rotate(360deg) } }
+/* 模拟考试：最后 1 分钟倒计时闪烁（ExamScreen 顶栏） */
+@keyframes examBlink { 0%, 100% { opacity: 1 } 50% { opacity: 0.35 } }
 
 .anim-fade-in    { animation: fadeIn  0.28s ease both; }
 .anim-slide-up   { animation: slideUp 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
@@ -432,6 +454,8 @@ body::before {
 .anim-scale-in   { animation: scaleIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .anim-modal-in   { animation: scaleIn 0.28s cubic-bezier(0.22, 1, 0.36, 1) both; }
 .anim-sheet-in   { animation: sheetIn 0.34s cubic-bezier(0.22, 1, 0.36, 1) both; }
+/* 加载中的环形（通知中心等列表页共用） */
+.anim-spin       { animation: spin 0.8s linear infinite; }
 
 .d-50  { animation-delay: 0.05s; }
 .d-100 { animation-delay: 0.10s; }
@@ -489,3 +513,193 @@ body::before {
   50%      { opacity: 0.72; transform: translateY(-0.5px); }
 }
 .flame-flicker { animation: flameFlicker 3.2s ease-in-out infinite; }
+
+/* ============================================================
+   深色模式（html[data-theme='dark']）
+   1) 覆盖 :root 的全部令牌
+   2) 覆盖 body 背景 / 光影层
+   3) 覆盖带硬编码白色的组件类（.card / .nav-liquid / .gb-* …）
+   4) 重映射登录 / 引导页用到的 Tailwind slate 工具类
+   改深色只改这一段，不要在组件里写死颜色。
+   ============================================================ */
+
+[data-theme='dark'] {
+  --bg: #14171A;
+  --surface: #1B2025;
+  --surface-warm: #212730;
+  --text-1: #ECEEF0;
+  --text-2: #A7AEB6;
+  --text-3: #7C848D;
+  --line: #2C3238;
+  --line-strong: #3A4149;
+  --accent: #8CC0BE;
+  --accent-weak: rgba(140, 192, 190, 0.14);
+  --accent-border: rgba(140, 192, 190, 0.32);
+  --ok: #8FBF9B;
+  --ok-weak: rgba(143, 191, 155, 0.14);
+  --ok-border: rgba(143, 191, 155, 0.32);
+  --err: #D99595;
+  --err-weak: rgba(217, 149, 149, 0.14);
+  --err-border: rgba(217, 149, 149, 0.32);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.35), 0 6px 20px rgba(0,0,0,0.30);
+
+  /* 磨砂玻璃 */
+  --glass-bg: linear-gradient(165deg, rgba(40,46,52,0.88) 0%, rgba(30,35,40,0.72) 55%, rgba(35,41,47,0.80) 100%);
+  --glass-border: rgba(255,255,255,0.08);
+  --glass-shadow: 0 1px 2px rgba(0,0,0,0.35), 0 8px 24px rgba(0,0,0,0.34), inset 0 1px 0 rgba(255,255,255,0.06);
+
+  /* 语义面 / 组件用色（深色值） */
+  --surface-raised: #1F252A;
+  --surface-translucent: rgba(34,40,46,0.78);
+  --field-bg: rgba(255,255,255,0.06);
+  --track: #2B3137;
+  --hairline: #3A4149;
+  --chip-bg: rgba(255,255,255,0.08);
+  --chip-bg-soft: rgba(255,255,255,0.06);
+  --chip-border: rgba(255,255,255,0.12);
+  --inset-hi: rgba(255,255,255,0.08);
+  --accent-fill: #3F6E6C;
+  --on-accent: #FFFFFF;
+
+  color-scheme: dark;
+}
+
+/* 页面底色与摄影感光影：深色版（暖调降低到几乎不可见，只留一点主色辉光） */
+[data-theme='dark'] body {
+  background:
+    radial-gradient(1100px 760px at 6% 100%, rgba(95, 141, 140, 0.16) 0%, rgba(95, 141, 140, 0.04) 42%, transparent 62%),
+    radial-gradient(950px 700px at 100% 0%, rgba(222, 180, 120, 0.06) 0%, rgba(222, 180, 120, 0.02) 45%, transparent 65%),
+    linear-gradient(160deg, #171B1E 0%, #14171A 46%, #101315 100%);
+}
+
+[data-theme='dark'] body::before {
+  background:
+    radial-gradient(120% 55% at 50% -12%, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 68%),
+    radial-gradient(24% 20% at 18% 22%, rgba(140,192,190,0.07) 0%, rgba(140,192,190,0) 70%),
+    radial-gradient(20% 18% at 82% 64%, rgba(140,192,190,0.05) 0%, rgba(140,192,190,0) 70%),
+    radial-gradient(120% 60% at 50% 118%, rgba(0,0,0,0.30) 0%, rgba(0,0,0,0) 62%);
+}
+
+/* 玻璃按钮：把浅色高光换成低亮度高光，白底渐变换成深灰渐变 */
+[data-theme='dark'] .gb::before, [data-theme='dark'] .gb-pill::before {
+  background: linear-gradient(180deg, rgba(255,255,255,0.07) 0%, rgba(255,255,255,0.02) 40%, rgba(0,0,0,0.14) 100%);
+}
+[data-theme='dark'] .gb::after, [data-theme='dark'] .gb-pill::after { opacity: 0.28; }
+[data-theme='dark'] .gb, [data-theme='dark'] .gb-pill {
+  border-color: rgba(255,255,255,0.10);
+  box-shadow:
+    inset 1px 1px 0 rgba(255,255,255,0.08),
+    inset -1px -1px 0 rgba(0,0,0,0.30),
+    0 1px 2px rgba(0,0,0,0.30),
+    0 6px 16px rgba(0,0,0,0.28);
+}
+[data-theme='dark'] .gb-primary {
+  background: rgba(255,255,255,0.07);
+  border-color: rgba(255,255,255,0.12);
+  color: #34D399;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.35), inset 0 -1px 0 rgba(255,255,255,0.06), 0 1px 3px rgba(0,0,0,0.30);
+}
+[data-theme='dark'] .gb-secondary { background: linear-gradient(180deg, rgba(52,58,65,0.94), rgba(38,44,49,0.88)); color: var(--text-1); }
+[data-theme='dark'] .gb-ghost { background: linear-gradient(180deg, rgba(48,54,61,0.90), rgba(34,40,45,0.74)); color: var(--text-2); }
+[data-theme='dark'] .gb-glass { background: linear-gradient(180deg, rgba(48,54,61,0.92), rgba(34,40,45,0.78)); color: var(--text-1); }
+[data-theme='dark'] .gb-danger { background: linear-gradient(180deg, rgba(158,92,92,0.92), rgba(126,70,70,0.90)); }
+[data-theme='dark'] .gb-success { background: linear-gradient(180deg, rgba(102,152,116,0.92), rgba(78,124,92,0.90)); }
+[data-theme='dark'] .gb-soft { border-color: rgba(255,255,255,0.12); box-shadow: inset 1px 1px 0 rgba(255,255,255,0.08), inset -1px -1px 0 rgba(0,0,0,0.28), 0 2px 8px rgba(0,0,0,0.26); }
+
+/* 液态玻璃导航舱 */
+[data-theme='dark'] .nav-liquid {
+  background: linear-gradient(165deg, rgba(42,48,55,0.94) 0%, rgba(30,35,40,0.82) 42%, rgba(36,42,48,0.88) 100%);
+  border-color: rgba(255,255,255,0.10);
+  box-shadow:
+    0 6px 20px rgba(0,0,0,0.36),
+    0 18px 52px rgba(0,0,0,0.42),
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.30);
+}
+[data-theme='dark'] .nav-liquid::before {
+  background:
+    radial-gradient(120% 140% at 50% -12%, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 55%),
+    radial-gradient(90% 60% at 50% 108%, rgba(140,192,190,0.12) 0%, rgba(140,192,190,0) 55%);
+}
+[data-theme='dark'] .nav-liquid-shine { opacity: 0.4; }
+
+/* 骨架屏 */
+[data-theme='dark'] .skeleton {
+  background: linear-gradient(90deg, #262C32 25%, #313840 50%, #262C32 75%);
+  background-size: 200% 100%;
+}
+
+/* 浅色实体面板（历史类名，深色下同样降亮度） */
+[data-theme='dark'] .glass-dark { background: linear-gradient(165deg, rgba(42,48,55,0.90), rgba(30,35,40,0.80)); }
+
+/* 半透明玻璃面板（首页快捷入口等次级卡片）
+   ⚠️ 浅色段的底色/描边是写死的白色渐变，深色段漏了它 → 整片发白、字看不清。
+   深色下换成深灰渐变 + 极浅描边，保证 --text-1 / --text-3 的对比度。 */
+[data-theme='dark'] .glass-panel {
+  background: linear-gradient(165deg, rgba(46,52,59,0.94) 0%, rgba(32,37,43,0.86) 55%, rgba(39,45,51,0.90) 100%);
+  border-color: rgba(255,255,255,0.09);
+  box-shadow:
+    0 1px 2px rgba(0,0,0,0.32),
+    0 6px 18px rgba(0,0,0,0.28),
+    inset 0 1px 0 rgba(255,255,255,0.06);
+}
+
+/* 卡片顶部那道白色柔光（.glass-glow::after）在深色下会让整张卡泛白，压到几乎不可见 */
+[data-theme='dark'] .glass-glow::after { opacity: 0.12; }
+
+/* ── 登录页 / 引导页的 Tailwind slate 工具类重映射 ──
+   这两页是全屏独立视觉（营销页），写的是 slate 色板；
+   深色模式下不逐个改 tsx，而是在这里统一映射到主题令牌。 */
+[data-theme='dark'] .text-slate-900,
+[data-theme='dark'] .text-slate-800 { color: var(--text-1); }
+[data-theme='dark'] .text-slate-700,
+[data-theme='dark'] .text-slate-600,
+[data-theme='dark'] .text-slate-500 { color: var(--text-2); }
+[data-theme='dark'] .text-slate-400 { color: var(--text-3); }
+[data-theme='dark'] .hover\:text-slate-600:hover,
+[data-theme='dark'] .hover\:text-slate-700:hover { color: var(--text-1); }
+[data-theme='dark'] .placeholder\:text-slate-400::placeholder { color: var(--text-3); }
+[data-theme='dark'] .bg-white\/70,
+[data-theme='dark'] .bg-white\/90 { background-color: var(--surface-translucent); }
+[data-theme='dark'] .bg-white { background-color: var(--surface); }
+[data-theme='dark'] .bg-slate-100\/80,
+[data-theme='dark'] .bg-slate-100\/90,
+[data-theme='dark'] .bg-slate-50 { background-color: var(--field-bg); }
+[data-theme='dark'] .focus\:bg-white:focus { background-color: var(--surface); }
+[data-theme='dark'] .border-white\/70,
+[data-theme='dark'] .border-slate-200,
+[data-theme='dark'] .border-slate-300 { border-color: var(--line); }
+/* 主色文字（登录页 segmented 选中态等）在深色下提亮，保证对比度 */
+[data-theme='dark'] .text-emerald-600 { color: #34D399; }
+/* 深色下阴影减弱，避免瓦楞感 */
+[data-theme='dark'] .shadow-slate-200\/60 { --tw-shadow-color: rgba(0,0,0,0.45); }
+
+/* 主题切换时的柔和过渡（只过渡颜色，避免布局动画干扰） */
+html[data-theme] body,
+html[data-theme] .card,
+html[data-theme] .gb,
+html[data-theme] .gb-pill {
+  transition: background-color 0.24s ease, border-color 0.24s ease, color 0.24s ease;
+}
+
+/* 新通知横幅：从顶部轻轻滑入（NotifyToast） */
+@keyframes notify-toast-in {
+  from { opacity: 0; transform: translateY(-14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.notify-toast-in { animation: notify-toast-in 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* 应用内 Excel 预览（DocViewer 的 sheet-html，白底容器内） */
+.sheet-html table { border-collapse: collapse; font-size: 12px; }
+.sheet-html td {
+  border: 1px solid #D8DBDF;
+  padding: 4px 8px;
+  color: #1F2428;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* docx 预览段落间距（docx-preview 输出的 section/div） */
+.docx-preview-host p { margin: 0.4em 0; }
+

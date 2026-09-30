@@ -8,6 +8,10 @@ export type Screen =
   | 'exam'
   | 'exam-result'
   | 'wrong-questions'
+  | 'score-records'
+  | 'watch-history'
+  | 'favorites'
+  | 'video-detail'
   | 'learning'
   | 'profile'
   | 'search'
@@ -15,7 +19,7 @@ export type Screen =
   | 'achievements'
   | 'settings'
 
-export type Tab = 'home' | 'questions' | 'wrong' | 'learning' | 'profile'
+export type Tab = 'home' | 'questions' | 'materials' | 'wrong' | 'learning' | 'profile'
 
 export type NDTMethod = 'UT' | 'RT' | 'MT' | 'PT' | 'ET' | 'VT' | '综合'
 
@@ -81,52 +85,4 @@ export interface TrainingSet {
   description: string
   gradient: [string, string]
   lastStudied?: string
-}
-
-export interface PracticeSession {
-  categoryId: NDTMethod | '综合'
-  questionIds: string[]
-  currentIndex: number
-  answers: Record<string, string>
-  startTime: number
-}
-
-export interface ExamSession {
-  type: string
-  questions: string[]
-  currentIndex: number
-  answers: Record<string, string>
-  startTime: number
-  timeLimit: number | null
-  timeRemaining: number | null
-}
-
-export interface AppState {
-  screen: Screen
-  tab: Tab
-  onboardingStep: number
-  selectedMethods: NDTMethod[]
-  selectedGoal: string | null
-  practiceSession: PracticeSession | null
-  examSession: ExamSession | null
-  practiceResultData: PracticeResultData | null
-  examResultData: ExamResultData | null
-}
-
-export interface PracticeResultData {
-  totalQuestions: number
-  correctCount: number
-  timeSeconds: number
-  categoryId: string
-  answers: Record<string, string>
-}
-
-export interface ExamResultData {
-  totalQuestions: number
-  correctCount: number
-  timeSeconds: number
-  type: string
-  score: number
-  passed: boolean
-  breakdown: Array<{ topic: string; accuracy: number }>
 }

@@ -1,0 +1,12 @@
+# NDT-劳人刷题 App · Python 服务依赖
+# 安装：pip install -r requirements.txt
+#
+# 说明：
+#   fastapi / uvicorn  —— Web 框架与服务器（必需）
+#   tencentcloud-sdk-python-sms —— 腾讯云短信 SDK（只装短信这一个产品的包，体积小）
+#                                  未安装或未配置凭证时，短信模块会自动降级为「本地验证码」模式，
+#                                  服务仍可正常启动，方便先本地联调。
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9
+tencentcloud-sdk-python-sms>=3.0.1200

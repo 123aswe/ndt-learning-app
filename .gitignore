@@ -19,3 +19,15 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+
+# ── Python 服务（server/）──────────────────────────────────
+# config.json 含腾讯云短信密钥，绝不能提交
+server/config.json
+# 本地数据库
+server/data/
+# 虚拟环境与 Python 缓存
+server/.venv/
+server/.deps_ok
+__pycache__/
+*.py[cod]
+.pytest_cache/

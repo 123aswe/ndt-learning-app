@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>管理后台登录 · NDT-劳人</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <!-- 管理后台登录页：账号密码登录 → 存 token → 跳 dashboard.html -->
+  <div class="login-page">
+    <div class="card login-card">
+      <div class="brand">
+        <div class="login-logo">NDT</div>
+        <h1>NDT-劳人 管理后台</h1>
+        <p>无损检测学习与考试训练平台</p>
+      </div>
+
+      <div id="error" class="alert alert-err hidden"></div>
+
+      <form id="login-form" autocomplete="off">
+        <div class="form-row">
+          <label for="username">管理员账号</label>
+          <input class="input" id="username" name="username" placeholder="请输入管理员账号" required />
+        </div>
+        <div class="form-row">
+          <label for="password">密码</label>
+          <input class="input" id="password" name="password" type="password" placeholder="请输入密码" required />
+        </div>
+        <button class="btn btn-primary btn-block" id="submit" type="submit">登录</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="api.js"></script>
+  <script src="login.js"></script>
+</body>
+</html>

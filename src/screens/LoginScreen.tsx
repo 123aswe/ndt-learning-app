@@ -1,19 +1,30 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '../components/BrandIcon'
+import { PasswordResetSheet } from '../components/PasswordResetSheet'
+import { authApi, saveSession, ApiError } from '../api/client'
+import type { LegalKey } from '../data/legal'
 
 /* ============================================================
    登录 / 注册页（iOS 极简 × Material Design 3）
    - 职责：引导页之后展示，登录成功后回调 onSuccess 进入主界面
-   - 双模式：验证码登录（手机号+动态验证码）/ 账号登录（账号+密码）
-   - 演示账号：admin / admin123（阶段一为 Mock 校验，阶段二再抽成正式逻辑）
-   - 修改注意：只改本文件；设计规范见 .modular/ui-brief.md 与本页顶部注释
+   - 双模式：
+       · 账号登录（账号 + 密码）→ POST /auth/password/login
+       · 注册（提交申请，需管理员审核）→ GET /auth/captcha + POST /auth/register
+   - 注册不即时生效：提交后进入管理后台「注册申请」待审，管理员通过后才能登录
+   - 图形验证码用于注册页人机校验（短信验证码已下线）
+   - 修改注意：只改本文件；设计规范见根目录 FRONTEND.md §10 / §11
    ============================================================ */
 
 interface LoginScreenProps {
   onSuccess: () => void
+  /** 打开《服务协议》/《隐私政策》页面 */
+  onOpenLegal: (docKey: LegalKey) => void
 }
 
-type LoginMode = 'code' | 'password'
+type AuthMode = 'login' | 'register'
+
+/** 账号规则：与后端 security / registrations.ACCOUNT_PATTERN 保持一致 */
+const ACCOUNT_PATTERN = /^[A-Za-z0-9_]{4,20}$/
 
 /* ── 品牌 Logo（官方 App 图标原图 + 薄荷绿微发光，与引导页一致） ── */
 function BrandLogo() {
@@ -27,109 +38,242 @@ function BrandLogo() {
   )
 }
 
-/* ── 快捷登录图标（微信 / Apple，本地内联，不污染共享图标库） ── */
-function WeChatIcon({ size = 24 }: { size?: number }) {
+/* ── 图标（本地内联，不污染共享图标库） ── */
+function EyeIcon({ open = true, size = 18 }: { open?: boolean; size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M9.5 4C5.9 4 3 6.6 3 9.9c0 1.9 1 3.5 2.5 4.6l-.7 2.2 2.2-1.2c.5.2 1 .3 1.6.3.3 0 .6 0 .9-.1-.1-.5-.1-1-.1-1.5 0-3.4 3.1-6.1 6.9-6.1h.4C14.9 5.8 12.4 4 9.5 4z" />
-      <path d="M7 7.6c.5 0 .9.4.9.9s-.4.9-.9.9-.9-.4-.9-.9.4-.9.9-.9zm5 0c.5 0 .9.4.9.9s-.4.9-.9.9-.9-.4-.9-.9.4-.9.9-.9z" />
-      <path d="M21 14.2c0-2.8-2.6-5-5.8-5s-5.8 2.2-5.8 5 2.6 5 5.8 5c.7 0 1.4-.1 2-.4l1.8 1-.6-1.7c1.6-.9 2.6-2.2 2.6-3.9z" />
-      <path d="M13.5 13.5c.5 0 .9.4.9.9s-.4.9-.9.9-.9-.4-.9-.9.4-.9.9-.9zm3.4 0c.5 0 .9.4.9.9s-.4.9-.9.9-.9-.4-.9-.9.4-.9.9-.9z" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {open ? (
+        <>
+          <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" />
+          <circle cx="12" cy="12" r="3" />
+        </>
+      ) : (
+        <>
+          <path d="M4 4l16 16" />
+          <path d="M9.9 5.9A9.6 9.6 0 0 1 12 5.5c6 0 9.5 6.5 9.5 6.5a17 17 0 0 1-3.4 4.1" />
+          <path d="M6.3 7.8A16.8 16.8 0 0 0 2.5 12S6 18.5 12 18.5c1.2 0 2.2-.2 3.1-.6" />
+        </>
+      )}
     </svg>
   )
 }
 
-function AppleIcon({ size = 24 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <path d="M16.4 12.9c0-2 1.6-3 1.7-3.1-.9-1.4-2.4-1.6-2.9-1.6-1.2-.1-2.4.7-3 .7s-1.6-.7-2.6-.7c-1.3 0-2.6.8-3.3 2-1.4 2.4-.4 6 1 8 .7 1 1.5 2.1 2.5 2.1s1.4-.6 2.6-.6 1.6.6 2.6.6 1.8-1 2.4-2c.8-1.1 1.1-2.2 1.1-2.2s-2-.8-2.1-3.2z" />
-      <path d="M14.4 6.7c.6-.7 1-1.7.9-2.7-.9 0-1.9.6-2.5 1.3-.6.6-1.1 1.7-.9 2.7 1 .1 1.9-.5 2.5-1.3z" />
-    </svg>
-  )
-}
-
-/* ── M3 风格输入框：柔和浅色底 + 获焦双色边框（emerald 边框 + 浅色光晕） ── */
+/* ── M3 风格输入框：柔和浅色底 + 获焦双色边框 ── */
 const inputClass =
   'h-12 w-full rounded-xl border border-transparent bg-slate-100/80 px-4 text-sm text-slate-800 ' +
   'placeholder:text-slate-400 outline-none transition-all duration-200 ' +
   'focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100/70'
 
-export function LoginScreen({ onSuccess }: LoginScreenProps) {
-  const [mode, setMode] = useState<LoginMode>('password') // 默认账号登录，便于直接用演示账号
-  /* 验证码登录字段 */
-  const [phone, setPhone] = useState('')
-  const [code, setCode] = useState('')
-  const [countdown, setCountdown] = useState(0)
+/** 带「显示/隐藏」的眼睛按钮的密码输入 */
+function PasswordInput({
+  value,
+  onChange,
+  placeholder,
+  onEnter,
+}: {
+  value: string
+  onChange: (v: string) => void
+  placeholder: string
+  onEnter?: () => void
+}) {
+  const [show, setShow] = useState(false)
+  return (
+    <div className="relative">
+      <input
+        className={inputClass + ' pr-11'}
+        type={show ? 'text' : 'password'}
+        placeholder={placeholder}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Enter') onEnter?.()
+        }}
+      />
+      <button
+        type="button"
+        onClick={() => setShow(s => !s)}
+        aria-label={show ? '隐藏密码' : '显示密码'}
+        className="absolute right-1 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 transition-colors hover:text-slate-600"
+      >
+        <EyeIcon open={show} />
+      </button>
+    </div>
+  )
+}
+
+export function LoginScreen({ onSuccess, onOpenLegal }: LoginScreenProps) {
+  const [mode, setMode] = useState<AuthMode>('login') // 默认账号登录，便于直接用后台账号验证
+
   /* 账号登录字段 */
   const [account, setAccount] = useState('')
   const [password, setPassword] = useState('')
+
+  /* 注册字段 */
+  const [regAccount, setRegAccount] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regConfirm, setRegConfirm] = useState('')
+  const [regOrg, setRegOrg] = useState('')
+  const [captchaCode, setCaptchaCode] = useState('')
+  const [captchaId, setCaptchaId] = useState('')
+  const [captchaImage, setCaptchaImage] = useState('')
+  const [captchaLoading, setCaptchaLoading] = useState(false)
+
   /* 通用状态 */
   const [agreed, setAgreed] = useState(false)
   const [error, setError] = useState('')
+  const [info, setInfo] = useState('')
   const [loading, setLoading] = useState(false)
   const [toast, setToast] = useState('')
+  /** 密码重置申请弹层（忘记密码 / 忘记账号，提交后由管理员处理） */
+  const [resetOpen, setResetOpen] = useState(false)
   const toastTimer = useRef<number | null>(null)
-
-  /* 验证码倒计时 */
-  useEffect(() => {
-    if (countdown <= 0) return
-    const t = window.setTimeout(() => setCountdown(c => c - 1), 1000)
-    return () => window.clearTimeout(t)
-  }, [countdown])
+  const aliveRef = useRef(true)
 
   /* Toast 自动消失 */
-  const showToast = (msg: string) => {
+  const showToast = useCallback((msg: string) => {
     setToast(msg)
     if (toastTimer.current) window.clearTimeout(toastTimer.current)
-    toastTimer.current = window.setTimeout(() => setToast(''), 2400)
-  }
+    toastTimer.current = window.setTimeout(() => setToast(''), 2600)
+  }, [])
 
-  /* 发送验证码（Mock：任何合法手机号都返回 123456） */
-  const handleSendCode = () => {
-    if (!/^1\d{10}$/.test(phone)) {
-      setError('请输入正确的手机号')
-      return
+  useEffect(() => {
+    aliveRef.current = true
+    return () => {
+      aliveRef.current = false
+      if (toastTimer.current) window.clearTimeout(toastTimer.current)
     }
+  }, [])
+
+  /* 图形验证码：拉一张新的（切到注册页、或点击图片刷新时调用） */
+  const refreshCaptcha = useCallback(async () => {
+    setCaptchaLoading(true)
+    try {
+      const data = await authApi.captcha()
+      if (!aliveRef.current) return
+      setCaptchaId(data.captcha_id)
+      setCaptchaImage(data.image)
+      setCaptchaCode('')
+    } catch (err) {
+      if (!aliveRef.current) return
+      setCaptchaImage('')
+      const message = err instanceof ApiError ? err.message : '图形验证码加载失败'
+      setError(message)
+    } finally {
+      if (aliveRef.current) setCaptchaLoading(false)
+    }
+  }, [])
+
+  /* 切到注册页时自动加载一张验证码 */
+  useEffect(() => {
+    if (mode === 'register' && !captchaImage) refreshCaptcha()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode])
+
+  const switchMode = (next: AuthMode) => {
+    setMode(next)
     setError('')
-    setCountdown(60)
-    showToast('验证码已发送（演示验证码：123456）')
+    setInfo('')
   }
 
-  /* 登录 / 注册二合一提交（阶段一 Mock 校验） */
-  const handleSubmit = () => {
+  /* 登录提交 */
+  const handleLogin = async () => {
     if (loading) return
     if (!agreed) {
       setError('请先阅读并同意《服务协议》和《隐私政策》')
       return
     }
+    const name = account.trim()
+    if (!name || !password) {
+      setError('请输入账号和密码')
+      return
+    }
     setError('')
+    setInfo('')
     setLoading(true)
-
-    /* 模拟 600ms 请求 */
-    window.setTimeout(() => {
-      let ok = false
-      if (mode === 'password') {
-        ok = account.trim() === 'admin' && password === 'admin123'
-        if (!ok) setError('账号或密码错误（演示账号：admin / admin123）')
-      } else {
-        if (!/^1\d{10}$/.test(phone)) {
-          setError('请输入正确的手机号')
-        } else if (code !== '123456') {
-          setError('验证码错误')
-        } else {
-          ok = true
-        }
-      }
+    try {
+      const result = await authApi.passwordLogin(name, password)
+      saveSession(
+        result.token,
+        result.identity,
+        (result.identity === 'admin' ? result.admin : result.user) || {},
+      )
+      showToast('登录成功，正在进入…')
+      window.setTimeout(onSuccess, 600)
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : '登录失败，请稍后重试'
+      setError(message)
+    } finally {
       setLoading(false)
-      if (ok) {
-        showToast('登录成功，正在进入…')
-        window.setTimeout(onSuccess, 600)
-      }
-    }, 600)
+    }
   }
 
+  /* 注册提交：只提交申请，等管理员审核 */
+  const handleRegister = async () => {
+    if (loading) return
+    if (!agreed) {
+      setError('请先阅读并同意《服务协议》和《隐私政策》')
+      return
+    }
+    if (!ACCOUNT_PATTERN.test(regAccount.trim())) {
+      setError('账号需为 4-20 位字母 / 数字 / 下划线')
+      return
+    }
+    if (regPassword.length < 6) {
+      setError('密码至少 6 位')
+      return
+    }
+    if (regPassword !== regConfirm) {
+      setError('两次输入的密码不一致')
+      return
+    }
+    if (!regOrg.trim()) {
+      setError('请填写单位 / 学校')
+      return
+    }
+    if (!captchaCode.trim()) {
+      setError('请输入图形验证码')
+      return
+    }
+
+    setError('')
+    setInfo('')
+    setLoading(true)
+    try {
+      const result = await authApi.register({
+        account: regAccount.trim(),
+        password: regPassword,
+        confirm_password: regConfirm,
+        org: regOrg.trim(),
+        captcha_id: captchaId,
+        captcha_code: captchaCode.trim(),
+      })
+      // 注册成功 ≠ 可登录：提示等待审核，并切回登录页
+      setInfo(result.message || '注册申请已提交，请等待管理员审核通过后再登录')
+      showToast('注册申请已提交，等待管理员审核')
+      setRegAccount('')
+      setRegPassword('')
+      setRegConfirm('')
+      setRegOrg('')
+      setCaptchaCode('')
+      setCaptchaImage('')
+      setMode('login')
+      setAccount(regAccount.trim())
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : '注册申请提交失败，请稍后重试'
+      setError(message)
+      // 验证码一次性：失败后刷新一张，避免用户反复用同一张
+      refreshCaptcha()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSubmit = mode === 'login' ? handleLogin : handleRegister
+
   return (
-    <div className="relative flex min-h-screen flex-col items-center overflow-hidden bg-gradient-to-b from-slate-50 via-slate-50 to-slate-100 backdrop-blur-md px-6 pb-10 pt-14">
+    <div className="relative flex min-h-screen flex-col items-center overflow-hidden px-6 pb-10 pt-14">
+      {/* 背景由 body 提供（主题感渐变），此处保持透明以适配深色模式 */}
       {/* 品牌 Header */}
       <div className="anim-slide-up flex flex-col items-center text-center">
         <BrandLogo />
@@ -145,20 +289,17 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
         让每一道题，都变成你的能力。
       </p>
 
-      {/* 登录卡片（毛玻璃） */}
+      {/* 卡片（毛玻璃） */}
       <div className="anim-slide-up d-150 mt-8 w-full rounded-3xl border border-white/70 bg-white/70 p-6 shadow-xl shadow-slate-200/60 backdrop-blur-md">
-        {/* 模式切换：验证码登录 / 账号登录 */}
+        {/* 模式切换：账号登录 / 注册 */}
         <div className="mb-5 flex rounded-full bg-slate-100/90 p-1">
           {([
-            { id: 'code', label: '验证码登录' },
-            { id: 'password', label: '账号登录' },
-          ] as Array<{ id: LoginMode; label: string }>).map(item => (
+            { id: 'login', label: '账号登录' },
+            { id: 'register', label: '注册' },
+          ] as Array<{ id: AuthMode; label: string }>).map(item => (
             <button
               key={item.id}
-              onClick={() => {
-                setMode(item.id)
-                setError('')
-              }}
+              onClick={() => switchMode(item.id)}
               className={`h-9 flex-1 rounded-full text-sm font-medium transition-all duration-200 tap ${
                 mode === item.id
                   ? 'bg-white text-emerald-600 shadow-sm'
@@ -172,43 +313,7 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
 
         {/* 表单区 */}
         <div className="space-y-3">
-          {mode === 'code' ? (
-            <>
-              {/* 手机号 + 获取验证码 */}
-              <div className="flex items-center gap-2">
-                <input
-                  className={inputClass}
-                  type="tel"
-                  inputMode="numeric"
-                  maxLength={11}
-                  placeholder="请输入手机号"
-                  value={phone}
-                  onChange={e => setPhone(e.target.value.replace(/\D/g, ''))}
-                />
-                <button
-                  onClick={handleSendCode}
-                  disabled={countdown > 0}
-                  className={`h-12 w-[118px] shrink-0 rounded-xl text-sm font-medium transition-all duration-200 tap ${
-                    countdown > 0
-                      ? 'cursor-not-allowed bg-slate-100 text-slate-400'
-                      : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-                  }`}
-                >
-                  {countdown > 0 ? `${countdown}s 后重发` : '获取验证码'}
-                </button>
-              </div>
-              {/* 验证码 */}
-              <input
-                className={inputClass}
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                placeholder="请输入验证码"
-                value={code}
-                onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
-              />
-            </>
-          ) : (
+          {mode === 'login' ? (
             <>
               <input
                 className={inputClass}
@@ -217,27 +322,90 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 value={account}
                 onChange={e => setAccount(e.target.value)}
               />
+              <PasswordInput
+                value={password}
+                onChange={setPassword}
+                placeholder="请输入密码"
+                onEnter={handleLogin}
+              />
+              {/* 忘记密码 / 忘记账号：提交重置申请给管理员 */}
+              <button
+                type="button"
+                onClick={() => setResetOpen(true)}
+                className="tap w-full px-1 text-left text-xs font-medium text-emerald-600"
+              >
+                忘记密码 / 忘记账号？点击提交重置申请
+              </button>
+            </>
+          ) : (
+            <>
               <input
                 className={inputClass}
-                type="password"
-                placeholder="请输入密码"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
+                type="text"
+                placeholder="设置登录账号（4-20 位字母 / 数字 / 下划线）"
+                value={regAccount}
+                onChange={e => setRegAccount(e.target.value)}
+              />
+              <PasswordInput value={regPassword} onChange={setRegPassword} placeholder="设置密码（至少 6 位）" />
+              <PasswordInput
+                value={regConfirm}
+                onChange={setRegConfirm}
+                placeholder="确认密码"
+              />
+              <input
+                className={inputClass}
+                type="text"
+                placeholder="单位 / 学校"
+                value={regOrg}
+                onChange={e => setRegOrg(e.target.value)}
                 onKeyDown={e => {
-                  if (e.key === 'Enter') handleSubmit()
+                  if (e.key === 'Enter') handleRegister()
                 }}
               />
-              <p className="px-1 text-xs text-slate-400">演示账号：admin　密码：admin123</p>
+
+              {/* 图形验证码 */}
+              <div className="flex items-center gap-2">
+                <input
+                  className={inputClass}
+                  type="text"
+                  maxLength={6}
+                  placeholder="请输入图形验证码"
+                  value={captchaCode}
+                  onChange={e => setCaptchaCode(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter') handleRegister()
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={refreshCaptcha}
+                  title="点击刷新验证码"
+                  className="flex h-12 w-[120px] shrink-0 items-center justify-center overflow-hidden rounded-xl border border-slate-200 bg-slate-50 transition-colors hover:border-emerald-300"
+                >
+                  {captchaImage ? (
+                    <img src={captchaImage} alt="图形验证码" className="h-full w-full object-cover" />
+                  ) : (
+                    <span className="text-xs text-slate-400">
+                      {captchaLoading ? '加载中…' : '点击获取'}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              <p className="px-1 text-xs leading-relaxed text-slate-400">
+                提交后需管理员审核通过，才能使用该账号登录。
+              </p>
             </>
           )}
         </div>
 
-        {/* 错误提示 */}
-        {error && (
-          <p className="mt-3 px-1 text-xs font-medium text-rose-500">{error}</p>
+        {/* 错误 / 成功提示 */}
+        {error && <p className="mt-3 px-1 text-xs font-medium text-rose-500">{error}</p>}
+        {info && !error && (
+          <p className="mt-3 px-1 text-xs font-medium leading-relaxed text-emerald-600">{info}</p>
         )}
 
-        {/* 登录 / 注册二合一主按钮：渐变青绿，hover 降透明度 */}
+        {/* 主按钮：登录 / 提交注册申请 */}
         <button
           onClick={handleSubmit}
           disabled={loading}
@@ -249,35 +417,14 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8V0C5.373 0 0 5.373 0 12h4z" />
               </svg>
-              登录中…
+              {mode === 'login' ? '登录中…' : '提交中…'}
             </>
+          ) : mode === 'login' ? (
+            '登录'
           ) : (
-            '登录 / 注册'
+            '提交注册申请'
           )}
         </button>
-
-        {/* 快捷登录 */}
-        <div className="mt-5 flex items-center gap-3">
-          <div className="h-px flex-1 bg-slate-200" />
-          <span className="text-xs text-slate-400">其他登录方式</span>
-          <div className="h-px flex-1 bg-slate-200" />
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            onClick={() => showToast('演示环境暂未接入微信登录')}
-            className="tap flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
-          >
-            <span className="text-[#07C160]"><WeChatIcon size={20} /></span>
-            微信登录
-          </button>
-          <button
-            onClick={() => showToast('演示环境暂未接入 Apple 登录')}
-            className="tap flex h-12 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white text-sm font-medium text-slate-700 transition-colors duration-200 hover:bg-slate-50"
-          >
-            <span className="text-slate-900"><AppleIcon size={20} /></span>
-            Apple 登录
-          </button>
-        </div>
 
         {/* 隐私协议勾选 */}
         <label className="mt-5 flex cursor-pointer items-start gap-2 select-none">
@@ -295,26 +442,28 @@ export function LoginScreen({ onSuccess }: LoginScreenProps) {
             </svg>
           </button>
           <span className="text-xs leading-relaxed text-slate-400">
-            登录即代表您已同意
+            我已阅读并同意
             <button
               type="button"
               className="px-0.5 text-emerald-600"
-              onClick={() => showToast('《服务协议》即将上线')}
+              onClick={() => onOpenLegal('terms')}
             >《服务协议》</button>
             和
             <button
               type="button"
               className="px-0.5 text-emerald-600"
-              onClick={() => showToast('《隐私政策》即将上线')}
+              onClick={() => onOpenLegal('privacy')}
             >《隐私政策》</button>
           </span>
         </label>
-
-        {/* 注册说明 */}
-        <p className="mt-4 text-center text-xs leading-relaxed text-slate-400">
-          注册功能暂时不开放，如需注册请添加管理员联系方式：2923614426，给您带来不便，敬请谅解！
-        </p>
       </div>
+
+      {/* 密码重置申请弹层（忘记密码 / 忘记账号 → 管理员处理） */}
+      <PasswordResetSheet
+        open={resetOpen}
+        defaultAccount={account}
+        onClose={() => setResetOpen(false)}
+      />
 
       {/* 底部 Toast */}
       {toast && (

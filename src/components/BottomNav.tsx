@@ -1,6 +1,6 @@
 import React from 'react'
 import type { Tab } from '../types'
-import { HomeIcon, GridIcon, WrongIcon, ChartIcon, UserIcon } from './icons'
+import { HomeIcon, GridIcon, ChartIcon, UserIcon, BookIcon } from './icons'
 
 interface BottomNavProps {
   activeTab: Tab
@@ -10,11 +10,13 @@ interface BottomNavProps {
 /* 底部导航：悬浮胶囊形磨砂玻璃导航舱（Liquid Glass Capsule）
    - 图标置于小瓷片内，subtle 3D 效果：内高光 + 微投影，激活时轻浮起
    - 标签文字保持深色高可读性（浅色玻璃上白字不可读）
-   修改注意：胶囊样式在 index.css `.nav-liquid`，微交互在下方 tabItem */
+   修改注意：胶囊样式在 index.css `.nav-liquid`，微交互在下方 tabItem
+   - 「错题」入口已移到「我的」页（错题集 / 成绩记录 / 观看历史）
+   - 「教材/视频」Tab：第二阶段接视频课程与电子教材，看完自动记入观看历史 */
 const tabs: Array<{ id: Tab; label: string; icon: (active: boolean) => React.ReactNode }> = [
   { id: 'home', label: '首页', icon: (a) => <HomeIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
   { id: 'questions', label: '题库', icon: (a) => <GridIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
-  { id: 'wrong', label: '错题', icon: (a) => <WrongIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
+  { id: 'materials', label: '教材/视频', icon: (a) => <BookIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
   { id: 'learning', label: '学习', icon: (a) => <ChartIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
   { id: 'profile', label: '我的', icon: (a) => <UserIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
 ]
@@ -47,10 +49,10 @@ export function BottomNav({ activeTab, onChange }: BottomNavProps) {
                     height: 36,
                     borderRadius: 14,
                     background: isActive ? 'var(--accent-weak)' : 'rgba(255,255,255,0.52)',
-                    border: isActive ? '1px solid var(--accent-border)' : '1px solid rgba(255,255,255,0.75)',
+                    border: isActive ? '1px solid var(--accent-border)' : '1px solid var(--chip-border)',
                     boxShadow: isActive
-                      ? 'inset 0 1px 0 rgba(255,255,255,0.85), 0 3px 9px rgba(95,141,140,0.28)'
-                      : 'inset 0 1px 0 rgba(255,255,255,0.85), 0 1px 3px rgba(27,30,35,0.07)',
+                      ? 'inset 0 1px 0 var(--inset-hi), 0 3px 9px rgba(95,141,140,0.28)'
+                      : 'inset 0 1px 0 var(--inset-hi), 0 1px 3px rgba(27,30,35,0.07)',
                     transform: isActive ? 'translateY(-1.5px)' : 'translateY(0)',
                     transition: 'transform 0.22s cubic-bezier(0.22,1,0.36,1), box-shadow 0.22s ease, background 0.2s ease',
                   }}

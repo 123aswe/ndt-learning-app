@@ -76,11 +76,29 @@ export const SearchIcon = (p: IconProps) => base(p, (
     <path d="M16 16l4.4 4.4" />
   </>
 ))
+/** 系统通知专用：盾牌 + 对勾（区别于普通铃铛，代表官方/系统下发） */
+export const ShieldIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M12 3.2 19 5.8v5.4c0 4.6-3 7.6-7 9.6-4-2-7-5-7-9.6V5.8z" />
+    <path d="M9.2 11.9l2 2 3.6-3.9" />
+  </>
+))
 export const ChevronRightIcon = (p: IconProps) => base(p, <path d="M9 5.5l6.5 6.5L9 18.5" />)
 export const ChevronLeftIcon = (p: IconProps) => base(p, <path d="M15 5.5 8.5 12l6.5 6.5" />)
 export const CheckIcon = (p: IconProps) => base(p, <path d="M4.5 12.5l5 5 10-11" />)
 export const XIcon = (p: IconProps) => base(p, <path d="M6 6l12 12M18 6L6 18" />)
 export const HeartIcon = (p: IconProps) => base(p, <path d="M12 20s-7.5-4.7-9.2-9.1C1.4 7.5 3.4 4.8 6.2 4.8c2 0 3.6 1.1 4.4 2.6h2.8c.8-1.5 2.4-2.6 4.4-2.6 2.8 0 4.8 2.7 3.4 6.1C19.5 15.3 12 20 12 20z" />)
+/* 播放量 / 浏览量（视频详情页与卡片上的统计用） */
+export const EyeIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M2.8 12S6.3 6.6 12 6.6 21.2 12 21.2 12 17.7 17.4 12 17.4 2.8 12 2.8 12z" />
+    <circle cx="12" cy="12" r="2.6" />
+  </>
+))
+/* 评论（视频详情页评论区） */
+export const MessageIcon = (p: IconProps) => base(p, (
+  <path d="M20.4 12c0 4-3.8 7.2-8.4 7.2-1 0-1.9-.15-2.8-.42L4.3 20.5l1.3-3.4C4.2 15.7 3.6 14 3.6 12c0-4 3.8-7.2 8.4-7.2s8.4 3.2 8.4 7.2z" />
+))
 export const ClockIcon = (p: IconProps) => base(p, (
   <>
     <circle cx="12" cy="12" r="8.6" />
@@ -98,6 +116,12 @@ export const PencilIcon = (p: IconProps) => base(p, (
   <>
     <path d="M4 20l1-4L16.5 4.5a2.1 2.1 0 0 1 3 3L8 19l-4 1z" />
     <path d="M14.5 6.5l3 3" />
+  </>
+))
+export const CameraIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M3 9.1A2.6 2.6 0 0 1 5.6 6.5h1.7l1.3-2h6.8l1.3 2h1.7A2.6 2.6 0 0 1 21 9.1v7.3a2.6 2.6 0 0 1-2.6 2.6H5.6A2.6 2.6 0 0 1 3 16.4z" />
+    <circle cx="12" cy="12.6" r="3.3" />
   </>
 ))
 export const BookIcon = (p: IconProps) => base(p, (
@@ -153,12 +177,6 @@ export const ClipboardIcon = (p: IconProps) => base(p, (
 export const WrenchIcon = (p: IconProps) => base(p, (
   <path d="M14.5 6.5a4.5 4.5 0 0 0-6 5.6L3.4 17.2a2 2 0 0 0 2.8 2.8l5.1-5.1a4.5 4.5 0 0 0 5.6-6l-3 3-2.4-.6-.6-2.4z" />
 ))
-export const LayersIcon = (p: IconProps) => base(p, (
-  <>
-    <path d="M12 3.5 21 8l-9 4.5L3 8z" />
-    <path d="M3 12.5l9 4.5 9-4.5" />
-  </>
-))
 export const FilterIcon = (p: IconProps) => base(p, (
   <>
     <path d="M4 6.5h16" />
@@ -192,7 +210,6 @@ export const InfoIcon = (p: IconProps) => base(p, (
     <path d="M12 8.2h.01" />
   </>
 ))
-export const SendIcon = (p: IconProps) => base(p, <path d="M4 12 20 4l-4.5 16-3.5-5.5z" />)
 export const FlagIcon = (p: IconProps) => base(p, (
   <>
     <path d="M5 21V4.5" />
@@ -211,9 +228,16 @@ export const CheckCircleIcon = (p: IconProps) => base(p, (
     <path d="M8.2 12.4l2.6 2.6 5-5.4" />
   </>
 ))
-export const XCircleIcon = (p: IconProps) => base(p, (
+export const LogoutIcon = (p: IconProps) => base(p, (
   <>
-    <circle cx="12" cy="12" r="8.6" />
-    <path d="M9.2 9.2l5.6 5.6M14.8 9.2l-5.6 5.6" />
+    <path d="M14 4h4.5a1.5 1.5 0 0 1 1.5 1.5v13a1.5 1.5 0 0 1-1.5 1.5H14" />
+    <path d="M10 8l-4 4 4 4M6 12h10" />
+  </>
+))
+export const TrashIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M4.5 6.5h15M9.5 6V4.8A1.3 1.3 0 0 1 10.8 3.5h2.4a1.3 1.3 0 0 1 1.3 1.3V6" />
+    <path d="M6.5 6.5l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.2a1.6 1.6 0 0 0 1.6-1.5l.8-12" />
+    <path d="M10 10.5v6M14 10.5v6" />
   </>
 ))

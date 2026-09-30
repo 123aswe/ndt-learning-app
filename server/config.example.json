@@ -1,0 +1,46 @@
+{
+  "_说明": "把本文件复制为 config.json 后填写。config.json 含密钥，不要提交到 git（.gitignore 已忽略）。",
+
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8000
+  },
+
+  "database": {
+    "path": "data/app.db"
+  },
+
+  "security": {
+    "token_ttl_hours": 24,
+    "pbkdf2_iterations": 200000
+  },
+
+  "captcha": {
+    "_说明": "注册页使用的图形验证码参数。",
+    "ttl_seconds": 300,
+    "length": 4
+  },
+
+  "sms": {
+    "_说明": "五项凭证全部填好才会真正调用腾讯云发短信；任一为空则自动降级为本地验证码模式。",
+    "secret_id": "",
+    "secret_key": "",
+    "sdk_app_id": "",
+    "sign_name": "",
+    "template_id": "",
+    "region": "ap-guangzhou",
+
+    "_限流说明": "以下为验证码风控参数，按需调整。",
+    "code_ttl_seconds": 300,
+    "resend_interval_seconds": 60,
+    "daily_limit_per_phone": 10,
+    "max_verify_attempts": 5
+  },
+
+  "frontend_origins": [
+    "http://localhost:8443",
+    "http://127.0.0.1:8443",
+    "http://localhost:5173",
+    "http://127.0.0.1:5173"
+  ]
+}

@@ -34,6 +34,14 @@ react(),
       host: process.env.FIGMA_DEV_SERVER_HOST || '0.0.0.0',
       port: parseInt(process.env.PORT || '8443'),
       strictPort: true,
+      // 开发环境下把 /api 转发给 Python 服务（server/main.py，默认 8000 端口）
+      // 想改后端地址：设置环境变量 API_TARGET，或直接改这里的 fallback
+      proxy: {
+        '/api': {
+          target: process.env.API_TARGET || 'http://127.0.0.1:8000',
+          changeOrigin: true,
+        },
+      },
       watch: {
         ignored: [
           '**/.figma/**',

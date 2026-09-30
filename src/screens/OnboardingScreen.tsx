@@ -255,7 +255,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
   const canNext = step === 0 || (step === 1 && selectedMethods.length > 0) || (step === 2 && selectedGoal !== null)
 
   return (
-    <div className="app-shell flex flex-col bg-[#F6F4EE]">
+    <div className="app-shell flex flex-col bg-[var(--surface-warm)]">
       {/* ── Step 0 · 品牌介绍 ── */}
       {step === 0 && (
         <div className="anim-fade-in flex min-h-screen flex-col px-7 pb-8 pt-14">
