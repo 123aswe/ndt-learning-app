@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_admin
+from modules import realtime
 from modules.notifications import send_system_notice
 from security import hash_password, new_random_password
 
@@ -195,10 +196,12 @@ def approve_reset(reset_id: int, body: ApproveBody, admin: dict = Depends(get_cu
             "UPDATE user_accounts SET password_hash = ? WHERE id = ?",
             (hash_password(final_password), user_id),
         )
-        # 改完密码让该考生所有已登录会话立即失效
+        # 改完密码让该考生所有已登录会话立即失效，并立刻把在线端赶回登录页
+        # （他重新登录后会在通知中心看到下面这条「密码重置成功」系统通知）
         conn.execute(
             "DELETE FROM sessions WHERE subject_type = 'user' AND subject_id = ?", (user_id,)
         )
+        realtime.kick_session(user_id, "密码已被管理员重置，请用新密码重新登录")
 
         # 以「系统通知」把新密码发给考生（不可删除）
         send_system_notice(

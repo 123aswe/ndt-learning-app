@@ -57,7 +57,7 @@ export function NotificationsScreen({ onBack }: NotificationsScreenProps) {
   }
 
   return (
-    <div className="scroll-area bg-page">
+    <div className="scroll-area bg-page ui-stagger">
       {/* 顶栏 */}
       <div className="px-5 pt-14 pb-4 flex items-center gap-3">
         <button
@@ -240,7 +240,7 @@ export function NotificationsScreen({ onBack }: NotificationsScreenProps) {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed left-1/2 -translate-x-1/2 top-20 z-[70] anim-slide-up">
+        <div className="no-stagger fixed left-1/2 -translate-x-1/2 top-20 z-[70] anim-slide-up">
           <div
             className="px-4 py-2.5 rounded-2xl text-sm font-medium"
             style={{ background: 'rgba(27,30,35,0.88)', color: '#FFFFFF', boxShadow: '0 8px 24px rgba(27,30,35,0.28)' }}

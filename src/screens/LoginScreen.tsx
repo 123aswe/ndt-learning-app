@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { BrandIcon } from '../components/BrandIcon'
 import { PasswordResetSheet } from '../components/PasswordResetSheet'
-import { authApi, saveSession, ApiError } from '../api/client'
+import { authApi, saveSession, ApiError, adminConsoleUrl } from '../api/client'
 import type { LegalKey } from '../data/legal'
 
 /* ============================================================
@@ -127,6 +127,9 @@ export function LoginScreen({ onSuccess, onOpenLegal }: LoginScreenProps) {
   const [toast, setToast] = useState('')
   /** 密码重置申请弹层（忘记密码 / 忘记账号，提交后由管理员处理） */
   const [resetOpen, setResetOpen] = useState(false)
+  /** 单端登录：该账号已在其他设备登录，等用户「同意 / 拒绝」是否顶号 */
+  const [conflictOpen, setConflictOpen] = useState(false)
+  const [conflictMsg, setConflictMsg] = useState('')
   const toastTimer = useRef<number | null>(null)
   const aliveRef = useRef(true)
 
@@ -176,7 +179,35 @@ export function LoginScreen({ onSuccess, onOpenLegal }: LoginScreenProps) {
     setInfo('')
   }
 
-  /* 登录提交 */
+  /* 登录提交（force=true 表示用户已在弹窗里确认顶掉其他设备） */
+  const doLogin = async (force: boolean) => {
+    if (loading) return
+    setError('')
+    setInfo('')
+    setLoading(true)
+    try {
+      const result = await authApi.passwordLogin(account.trim(), password, force)
+      // 单端登录：账号已在其他设备登录 → 弹「同意 / 拒绝」，不直接进入
+      if (result.conflict) {
+        setConflictMsg(result.message || '该账号已在其他设备登录')
+        setConflictOpen(true)
+        return
+      }
+      saveSession(
+        result.token,
+        result.identity,
+        (result.identity === 'admin' ? result.admin : result.user) || {},
+      )
+      showToast(force ? '已退出其他设备，登录成功' : '登录成功，正在进入…')
+      window.setTimeout(onSuccess, 600)
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : '登录失败，请稍后重试'
+      setError(message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const handleLogin = async () => {
     if (loading) return
     if (!agreed) {
@@ -190,22 +221,13 @@ export function LoginScreen({ onSuccess, onOpenLegal }: LoginScreenProps) {
     }
     setError('')
     setInfo('')
-    setLoading(true)
-    try {
-      const result = await authApi.passwordLogin(name, password)
-      saveSession(
-        result.token,
-        result.identity,
-        (result.identity === 'admin' ? result.admin : result.user) || {},
-      )
-      showToast('登录成功，正在进入…')
-      window.setTimeout(onSuccess, 600)
-    } catch (err) {
-      const message = err instanceof ApiError ? err.message : '登录失败，请稍后重试'
-      setError(message)
-    } finally {
-      setLoading(false)
-    }
+    await doLogin(false)
+  }
+
+  /** 顶号确认弹窗「同意」：退出对方会话，本机登录成功 */
+  const handleConflictAccept = async () => {
+    setConflictOpen(false)
+    await doLogin(true)
   }
 
   /* 注册提交：只提交申请，等管理员审核 */
@@ -458,12 +480,57 @@ export function LoginScreen({ onSuccess, onOpenLegal }: LoginScreenProps) {
         </label>
       </div>
 
+      {/* 管理员入口：跳同源的管理后台登录页（考生用不到，故做得克制不抢视线）
+          地址由 client.ts 的 adminConsoleUrl() 推导：生产/公网同源，开发态指 8000 */}
+      <button
+        type="button"
+        onClick={() => window.location.assign(adminConsoleUrl())}
+        className="anim-slide-up d-200 tap mt-6 text-xs font-medium transition-opacity hover:opacity-70"
+        style={{ color: 'var(--text-3)' }}
+      >
+        管理员登录
+      </button>
+
       {/* 密码重置申请弹层（忘记密码 / 忘记账号 → 管理员处理） */}
       <PasswordResetSheet
         open={resetOpen}
         defaultAccount={account}
         onClose={() => setResetOpen(false)}
       />
+
+      {/* 单端登录确认弹层：该账号已在其他设备登录 → 同意（顶掉对方）/ 拒绝 */}
+      {conflictOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/30" onClick={() => setConflictOpen(false)} />
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="anim-scale-in relative w-full max-w-[360px] rounded-3xl border border-white/70 bg-white/90 p-6 shadow-xl shadow-slate-200/60 backdrop-blur-md"
+          >
+            <h3 className="text-base font-bold text-slate-800">该账号已在其他设备登录</h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-500">
+              {conflictMsg}
+            </p>
+            <div className="mt-5 flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConflictOpen(false)}
+                className="tap h-11 flex-1 rounded-2xl border border-slate-200 bg-white text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                拒绝
+              </button>
+              <button
+                type="button"
+                onClick={handleConflictAccept}
+                disabled={loading}
+                className="tap h-11 flex-1 rounded-2xl bg-gradient-to-r from-emerald-400 to-teal-500 text-sm font-semibold text-white shadow-lg shadow-emerald-200/60 transition-all duration-200 hover:opacity-90 disabled:opacity-60"
+              >
+                {loading ? '正在登录…' : '同意并登录'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 底部 Toast */}
       {toast && (

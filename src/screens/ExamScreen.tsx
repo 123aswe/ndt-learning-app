@@ -3,6 +3,9 @@ import { examApi, type ExamQuestion, type ExamStartResult, type ExamSubmitResult
 import {
   ChevronLeftIcon, ChevronRightIcon, ClockIcon, GridIcon,
 } from '../components/icons'
+import { RichText } from '../components/RichText'
+import { QTYPE_LABELS, normalizeMultiAnswer } from '../data/qtypes'
+import { useSoftKeyboard } from '../hooks/useSoftKeyboard'
 
 /* ============================================================
    模拟考试 · 答题页（苹果式浅色）
@@ -27,10 +30,13 @@ function formatCountdown(s: number) {
 }
 
 function qtypeLabel(q: ExamQuestion): string {
-  if (q.qtype === 'judge') return '判断题'
-  if (q.qtype === 'calc') return '计算题'
-  if (q.qtype === 'short') return '简答题'
-  return '选择题'
+  return QTYPE_LABELS[q.qtype] || '选择题'
+}
+
+/** 无选项的计算题：考试里给一个答案输入框，考生只需填自己的答案；
+ *  交卷后由服务端按统一口径判分（modules/exam.py 的 answers_match） */
+function isCalcInput(q: ExamQuestion): boolean {
+  return q.qtype === 'calc' && (!q.options || q.options.length === 0)
 }
 
 export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
@@ -43,6 +49,9 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
   const [showNavigator, setShowNavigator] = useState(false)
   const [showExitModal, setShowExitModal] = useState(false)
   const [questionVisible, setQuestionVisible] = useState(true)
+  /** v1.85 软键盘弹出（在计算题答案框里打字）时收起底部「上一题 / 交卷 / 下一题」操作条，
+      屏幕上只留输入框和键盘；收起键盘后自动恢复 */
+  const softKeyboard = useSoftKeyboard()
   const [submitting, setSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState('')
   /** 未答完时交卷需两次确认 */
@@ -56,8 +65,10 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
   remainingRef.current = remaining
 
   const currentQ = questions[currentIndex]
+  const calcInput = Boolean(currentQ) && isCalcInput(currentQ)
   const progress = total > 0 ? ((currentIndex + 1) / total) * 100 : 0
-  const answeredCount = Object.keys(answers).length
+  /** 已答题数：多选题把勾选全取消后该题回到「未答」（空串不计） */
+  const answeredCount = Object.values(answers).filter(v => v && v.length > 0).length
 
   /* ── 倒计时 ── */
   useEffect(() => {
@@ -79,10 +90,13 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
     setSubmitting(true)
     setSubmitError('')
     const timeUsed = session.duration_minutes * 60 - remainingRef.current
-    const payload = Object.entries(answers).map(([idx, key]) => ({
-      question_id: questions[Number(idx)].id,
-      user_answer: key,
-    }))
+    // 未作答（含多选取消勾选后为空）的题不提交，与练习口径一致
+    const payload = Object.entries(answers)
+      .filter(([, key]) => key && key.length > 0)
+      .map(([idx, key]) => ({
+        question_id: questions[Number(idx)].id,
+        user_answer: key,
+      }))
     examApi
       .submit(session.exam_id, Math.max(timeUsed, 0), payload, auto)
       .then(result => onComplete(result))
@@ -101,8 +115,20 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
 
   /* ── 答题（可改答案，不判分） ── */
   const handleSelect = useCallback((key: string) => {
+    const q = questions[currentIndex]
+    // 多选题：点选项 = 勾选 / 取消勾选（交卷时服务端按字母集合判分）
+    if (q && q.qtype === 'multi') {
+      setAnswers(prev => {
+        const cur = prev[currentIndex] || ''
+        const next = cur.includes(key)
+          ? cur.replace(key, '')
+          : normalizeMultiAnswer(cur + key)
+        return { ...prev, [currentIndex]: next }
+      })
+      return
+    }
     setAnswers(prev => ({ ...prev, [currentIndex]: key }))
-  }, [currentIndex])
+  }, [currentIndex, questions])
 
   const switchTo = useCallback((index: number) => {
     if (index < 0 || index >= total || index === currentIndex) return
@@ -211,45 +237,76 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
             )}
           </div>
           <p className="text-base leading-relaxed font-medium" style={{ color: 'var(--text-1)', letterSpacing: '-0.005em' }}>
-            {currentQ.content}
+            <RichText text={currentQ.content} />
           </p>
         </div>
 
-        {/* 选项卡片：考试中只标记「我选的」，不显示对错 */}
-        <div className="space-y-3 mb-4">
-          {(currentQ.options ?? []).map(opt => {
-            const picked = answers[currentIndex] === opt.key
-            return (
-              <div
-                key={opt.key}
-                className="answer-card relative rounded-2xl px-4 py-3.5 flex items-start gap-3"
-                onClick={() => handleSelect(opt.key)}
-                style={{
-                  background: picked ? 'var(--accent-weak)' : 'var(--chip-bg-soft)',
-                  border: `1.5px solid ${picked ? 'var(--accent-border)' : 'var(--inset-hi)'}`,
-                }}
-              >
+        {/* 多选题提示：考试里也是多选，交卷后由服务端按字母集合判分 */}
+        {currentQ.qtype === 'multi' && (
+          <div className="mb-2 flex items-center gap-1.5 px-1">
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-weak)', color: 'var(--accent)' }}>
+              多选
+            </span>
+            <span className="text-[11px]" style={{ color: 'var(--text-3)' }}>
+              本题可多选，{answers[currentIndex] ? `已选 ${answers[currentIndex]}` : '再点一次可取消'}
+            </span>
+          </div>
+        )}
+
+        {/* 选项卡片（计算题则换成答案输入框）：考试中只标记「我写的 / 我选的」，不显示对错 */}
+        {calcInput ? (
+          <div className="card p-4 mb-4">
+            <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-3)' }}>我的答案</p>
+            <textarea
+              value={answers[currentIndex] || ''}
+              onChange={e => setAnswers(prev => ({ ...prev, [currentIndex]: e.target.value }))}
+              rows={2}
+              maxLength={200}
+              placeholder="写下你算出的答案（数值或文字，带单位也可以）"
+              className="w-full rounded-xl px-3 py-2.5 text-sm outline-none resize-none"
+              style={{ background: 'var(--field-bg)', border: '1px solid var(--line)', color: 'var(--text-1)' }}
+            />
+            <p className="text-[10px] mt-2" style={{ color: 'var(--text-3)' }}>
+              交卷后由系统判分；答案与讲解在「试卷回看」里看
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-3 mb-4">
+            {(currentQ.options ?? []).map(opt => {
+              const picked = (answers[currentIndex] || '').includes(opt.key)
+              return (
                 <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                  key={opt.key}
+                  className="answer-card relative rounded-2xl px-4 py-3.5 flex items-start gap-3"
+                  onClick={() => handleSelect(opt.key)}
                   style={{
-                    background: picked ? 'var(--accent-fill)' : 'var(--track)',
-                    color: picked ? 'var(--on-accent)' : 'var(--text-2)',
+                    background: picked ? 'var(--accent-weak)' : 'var(--chip-bg-soft)',
+                    border: `1.5px solid ${picked ? 'var(--accent-border)' : 'var(--inset-hi)'}`,
                   }}
                 >
-                  {opt.key}
+                  <div
+                    className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                    style={{
+                      background: picked ? 'var(--accent-fill)' : 'var(--track)',
+                      color: picked ? 'var(--on-accent)' : 'var(--text-2)',
+                    }}
+                  >
+                    {opt.key}
+                  </div>
+                  <p className="text-sm leading-relaxed flex-1" style={{ color: picked ? 'var(--accent)' : 'var(--text-1)' }}>
+                    <RichText text={opt.text} noZoom />
+                  </p>
                 </div>
-                <p className="text-sm leading-relaxed flex-1" style={{ color: picked ? 'var(--accent)' : 'var(--text-1)' }}>
-                  {opt.text}
-                </p>
-              </div>
-            )
-          })}
-        </div>
+              )
+            })}
+          </div>
+        )}
 
         <div className="h-24" />
       </div>
 
-      {/* ── 底部操作条：上一题 / 交卷 / 下一题 ── */}
+      {/* ── 底部操作条：上一题 / 交卷 / 下一题（v1.85：软键盘弹出时整条收起，只留键盘） ── */}
+      {!softKeyboard && (
       <div
         className="px-4 pt-3 pb-8"
         style={{
@@ -289,6 +346,7 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
           </button>
         </div>
       </div>
+      )}
 
       {/* ── 题目导航面板 ── */}
       {showNavigator && (
@@ -311,7 +369,7 @@ export function ExamScreen({ session, onExit, onComplete }: ExamScreenProps) {
 
               <div className="grid grid-cols-5 gap-2.5 mb-5">
                 {questions.map((q, i) => {
-                  const answered = i in answers
+                  const answered = Boolean(answers[i])
                   const isCurrent = i === currentIndex
                   return (
                     <button

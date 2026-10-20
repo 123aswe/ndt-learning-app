@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_admin
 from modules import captcha as captcha_module
+from modules import notifications
 from profile_defaults import random_avatar, random_nickname
 from security import hash_password
 
@@ -189,7 +190,7 @@ def approve_registration(
         password_hash = hash_password(body.password) if body.password else reg["password_hash"]
         org = (body.org or "").strip() or reg["org"]
 
-        conn.execute(
+        cursor = conn.execute(
             """INSERT INTO user_accounts
                (account, password_hash, org, nickname, avatar, real_name, method, status, remark, created_at)
                VALUES (?,?,?,?,?,'','',1,?,?)""",
@@ -204,6 +205,11 @@ def approve_registration(
                 now_iso(),
             ),
         )
+        new_user_id = int(cursor.lastrowid)
+
+        # 新考生自动收到一条「欢迎加入」系统通知（文案见 modules/notifications.py 的 WELCOME_*）
+        notifications.send_welcome_notice(conn, user_id=new_user_id)
+
         conn.execute(
             """UPDATE registrations
                SET status = 'approved', reviewed_by = ?, reviewed_at = ?

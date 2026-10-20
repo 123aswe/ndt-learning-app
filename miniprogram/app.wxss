@@ -1,0 +1,251 @@
+/* ============================================================
+   全局样式 —— 只服务「加载兜底页」这一处小程序自带界面。
+   App 本体（首页 / 题库 / 我的 …）的样式全在 web-view 里的 H5 中，
+   本文件一行都不影响它。
+   配色取自 App 的设计令牌（src/index.css），保证视觉同源：
+     --bg #F3F4F6 / --surface #FFFFFF / --text-1 #1B1E23
+     --text-2 #5F6670 / --text-3 #9AA1A9 / --accent #5F8D8C
+   ============================================================ */
+
+page {
+  background: #F3F4F6;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: #1B1E23;
+}
+
+.fb-wrap {
+  min-height: 100vh;
+  padding: 72rpx 48rpx 48rpx;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+.fb-icon {
+  width: 128rpx;
+  height: 128rpx;
+  border-radius: 40rpx;
+  background: rgba(95, 141, 140, 0.12);
+  color: #5F8D8C;
+  font-size: 60rpx;
+  line-height: 128rpx;
+  margin-bottom: 36rpx;
+}
+
+.fb-title {
+  font-size: 34rpx;
+  font-weight: 600;
+  color: #1B1E23;
+  margin-bottom: 16rpx;
+}
+
+.fb-desc {
+  font-size: 26rpx;
+  line-height: 1.7;
+  color: #5F6670;
+  margin-bottom: 8rpx;
+}
+
+.fb-url {
+  margin: 24rpx 0 8rpx;
+  padding: 20rpx 24rpx;
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFFFFF;
+  border: 1rpx solid rgba(0, 0, 0, 0.06);
+  border-radius: 20rpx;
+  font-size: 24rpx;
+  color: #5F6670;
+  word-break: break-all;
+  text-align: left;
+}
+
+.fb-tip {
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #9AA1A9;
+  text-align: left;
+  margin-top: 20rpx;
+  width: 100%;
+}
+
+.fb-actions {
+  width: 100%;
+  margin-top: 40rpx;
+}
+
+/* 快捷地址（内容 = 后端 /api/access-info，即后台「网络访问」卡片里的三条） */
+.fb-sub {
+  width: 100%;
+  margin-top: 28rpx;
+  font-size: 24rpx;
+  color: #9AA1A9;
+  text-align: left;
+}
+
+.fb-chips {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  margin-top: 16rpx;
+}
+
+.fb-chip {
+  padding: 14rpx 30rpx;
+  margin: 0 16rpx 16rpx 0;
+  background: #FFFFFF;
+  border: 1rpx solid rgba(95, 141, 140, 0.4);
+  border-radius: 999rpx;
+  font-size: 26rpx;
+  color: #5F8D8C;
+}
+
+.fb-btn {
+  width: 100%;
+  height: 92rpx;
+  line-height: 92rpx;
+  border-radius: 24rpx;
+  font-size: 30rpx;
+  font-weight: 500;
+  margin-bottom: 24rpx;
+  padding: 0;
+}
+
+.fb-btn::after {
+  border: none;
+}
+
+.fb-btn-primary {
+  background: #5F8D8C;
+  color: #FFFFFF;
+}
+
+.fb-btn-ghost {
+  background: #FFFFFF;
+  color: #1B1E23;
+  border: 1rpx solid rgba(0, 0, 0, 0.08);
+  box-sizing: border-box;
+}
+
+/* ── 「连接中」界面（③ 之前的第一屏，避免出现白屏） ── */
+.ld-wrap {
+  min-height: 100vh;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48rpx;
+}
+
+.ld-spinner {
+  width: 64rpx;
+  height: 64rpx;
+  border: 6rpx solid rgba(95, 141, 140, 0.18);
+  border-top-color: #5F8D8C;
+  border-radius: 50%;
+  animation: ld-spin 0.9s linear infinite;
+}
+
+@keyframes ld-spin {
+  to { transform: rotate(360deg); }
+}
+
+.ld-text {
+  margin-top: 32rpx;
+  font-size: 28rpx;
+  color: #5F6670;
+}
+
+.ld-url {
+  margin-top: 16rpx;
+  font-size: 22rpx;
+  color: #9AA1A9;
+  word-break: break-all;
+  text-align: center;
+}
+
+/* ── 域名校验提示卡（被拦下时的「立刻能用」解法） ── */
+.fb-warn {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 32rpx;
+  padding: 28rpx 28rpx 24rpx;
+  background: rgba(215, 138, 46, 0.08);
+  border: 1rpx solid rgba(215, 138, 46, 0.28);
+  border-radius: 20rpx;
+  text-align: left;
+}
+
+.fb-warn-t {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: #A9691B;
+}
+
+.fb-warn-d {
+  margin-top: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.7;
+  color: #8A6432;
+}
+
+.fb-btn-warn {
+  margin: 24rpx 0 0;
+  background: #D78A2E;
+  color: #FFFFFF;
+}
+
+/* ── 诊断信息 ── */
+.fb-diag {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 32rpx;
+  padding: 24rpx;
+  background: #FFFFFF;
+  border: 1rpx solid rgba(0, 0, 0, 0.06);
+  border-radius: 20rpx;
+  text-align: left;
+}
+
+.fb-diag-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12rpx;
+}
+
+.fb-diag-title {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: #5F6670;
+}
+
+.fb-diag-copy {
+  font-size: 24rpx;
+  color: #5F8D8C;
+  padding: 4rpx 12rpx;
+}
+
+.fb-diag-row {
+  display: flex;
+  align-items: flex-start;
+  font-size: 22rpx;
+  line-height: 1.7;
+  color: #9AA1A9;
+}
+
+.fb-diag-k {
+  flex: none;
+  width: 120rpx;
+  color: #9AA1A9;
+}
+
+.fb-diag-v {
+  flex: 1;
+  word-break: break-all;
+  color: #5F6670;
+}

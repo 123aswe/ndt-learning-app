@@ -1,27 +1,43 @@
 import React, { useEffect, useRef, useState } from 'react'
 import {
   bankApi, practiceApi,
-  type BankChapter, type BankSearchItem, type BankSet, type BankSummary,
+  type BankChapter, type BankSearchItem, type BankSeries, type BankSet, type BankSummary,
 } from '../api/client'
-import { SearchIcon, FilterIcon, ChevronRightIcon, TrashIcon, PlayIcon } from '../components/icons'
+import { SearchIcon, FilterIcon, ChevronRightIcon, TrashIcon, PlayIcon, LayersIcon, ListIcon } from '../components/icons'
+import { SetPracticeSheet } from '../components/SetPracticeSheet'
+import { stripRichText } from '../data/richText'
+import { QTYPE_LABELS, QTYPE_ORDER } from '../data/qtypes'
+import { useStagger } from '../hooks/useStagger'
 import type { NDTMethod } from '../types'
 
 /* ============================================================
    题库分类页（苹果式浅色）
-   结构保持：标题 / 搜索框 / 分类 Tab / 检测方法卡片（内置一级题库） / 题库列表（管理员创建）
+   结构（v30 三层：题库系列 → 题库 → 章节）：
+     标题 / 搜索框 / 分类 Tab
+       → 检测方法卡（内置一级题库，点开「选择练习方式」，可顺序或按章节）
+       → 题库系列卡（后台建的分组，点进「题库系列详情页」看这个系列下的题库）
+       → 其他题库（没归系列的散题库，直接平铺）
    数据全部实时：
    - 概览与各方向题量、我的完成度 → GET /api/bank/summary
-   - 管理员后台创建的题库 → GET /api/bank/sets（题库管理里建库放题，这里动态出现）
+   - 题库系列 → GET /api/bank/series；题库 → GET /api/bank/sets（都只返回有题/有库的）
    - 搜索 → GET /api/bank/search（300ms 防抖）
-   - 点击题库 → 弹出「选择练习方式」面板：
-       · 内置方向：顺序练习（全部题目）/ 按章节练习（每章一起）
-       · 两者都可按题型筛选（全部/判断/选择/计算/简答，chips 来自 summary 矩阵）
-       · 自定义题库：选题型（全部/判断/选择/计算/简答）后开始练习
-       · 可「清除记录」重新做（POST /api/practice/reset，只删自己的）
+   - 点题库 → 练习面板（整套题库 / 按章节，见 components/SetPracticeSheet.tsx）
+   分类 Tab 口径（v30 起）：
+     - 内置方向卡：按方向题量（老行为不变）
+     - 题库系列：按系列的「方向」字段过滤；「通用」系列在所有 Tab 下都显示
+     - 散题库（未归系列）只在「全部」Tab 下显示（它们没有方向归属）
+   修改注意：
+     - 题型标签统一从 src/data/qtypes.ts 取（与 server/modules/bank.py QTYPE_NAMES 同步）
    ============================================================ */
 
 interface QuestionBankScreenProps {
   onStartPractice: (categoryId: string, opts?: { topic?: string; setId?: number; qtype?: string; setTitle?: string }) => void
+  /** 点题库系列卡 → 进「题库系列详情页」（由 App.tsx 切视图） */
+  onOpenBankSeries: (series: BankSeries) => void
+  /** v1.76 从这个题库进的练习，退出 / 交卷回题库页时自动重新展开它的练习面板（值 = 题库 id） */
+  restoreSetId?: number | null
+  /** 消费完通知 App 清空（否则以后每次切回题库 Tab 都会自动弹面板） */
+  onRestoreConsumed?: () => void
 }
 
 /** 由方向代码推导的训练集名（方向中文名来自接口） */
@@ -29,15 +45,116 @@ const ALL_CATS: Array<NDTMethod | '全部' | 'ET' | 'VT' | '综合'> = [
   '全部', 'UT', 'RT', 'MT', 'PT', 'ET', 'VT', '综合',
 ]
 
-/** 题型代码 → 标签（跨端一致常量，与 server/modules/bank.py QTYPE_NAMES 同步） */
-const QTYPE_LABELS: Record<string, string> = {
-  judge: '判断题',
-  single: '选择题',
-  calc: '计算题',
-  short: '简答题',
+/* ── 题库系列卡（横向条：封面缩略 + 名称 + 简介 + 题库数/题数），点进系列详情页 ── */
+function BankSeriesCard({ series, onOpen }: { series: BankSeries; onOpen: () => void }) {
+  const [coverFailed, setCoverFailed] = useState(false)
+  const useCover = series.has_cover && !coverFailed
+  return (
+    <button onClick={onOpen} className="card w-full px-3 py-3 flex items-center gap-3.5 card-tap text-left">
+      <div
+        className="w-16 h-16 rounded-2xl flex-shrink-0 relative overflow-hidden flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(150deg, var(--accent-weak), var(--surface-warm))',
+          border: '1px solid var(--accent-border)',
+        }}
+      >
+        {useCover ? (
+          <img
+            src={bankApi.seriesCoverUrl(series.id)}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={() => setCoverFailed(true)}
+          />
+        ) : (
+          <span style={{ color: 'var(--accent)', opacity: 0.3 }}><LayersIcon size={26} /></span>
+        )}
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <LayersIcon size={12} color="var(--accent)" />
+          <span className="text-[9.5px] font-bold tracking-wide" style={{ color: 'var(--accent)' }}>
+            {series.method ? `${series.method} 题库系列` : '题库系列'}
+          </span>
+        </div>
+        <p className="text-[13.5px] font-bold mt-1 line-clamp-1" style={{ color: 'var(--text-1)' }}>{series.name}</p>
+        <p className="text-[10.5px] mt-0.5 line-clamp-1" style={{ color: 'var(--text-3)' }}>
+          {series.description || `${series.bank_count} 套题库`}
+        </p>
+        <p className="text-[10px] mt-1 font-semibold" style={{ color: 'var(--text-2)' }}>
+          共 {series.bank_count} 套题库 · {series.total} 题
+        </p>
+      </div>
+
+      <ChevronRightIcon size={16} color="var(--text-3)" />
+    </button>
+  )
 }
 
-export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps) {
+/* ── 题库卡（散题库 / 系列详情页共用）：封面缩略 + 名称 + 级别 + 题数/题型分布 ── */
+export function BankSetCard({ set, onOpen }: { set: BankSet; onOpen: () => void }) {
+  const [coverFailed, setCoverFailed] = useState(false)
+  const useCover = set.has_cover && !coverFailed
+  const dist = QTYPE_ORDER
+    .map(q => ({ label: QTYPE_LABELS[q], n: set.qtype_counts?.[q] ?? 0 }))
+    .filter(x => x.n > 0)
+  return (
+    <button onClick={onOpen} className="w-full card p-4 text-left card-tap">
+      <div className="flex items-start gap-4">
+        <div
+          className="w-12 h-12 rounded-2xl flex-shrink-0 relative overflow-hidden flex items-center justify-center"
+          style={{ background: 'var(--accent-weak)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
+        >
+          {useCover ? (
+            <img
+              src={bankApi.setCoverUrl(set.id)}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+              onError={() => setCoverFailed(true)}
+            />
+          ) : (
+            <ListIcon size={20} />
+          )}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{set.name}</span>
+            {set.level && (
+              <span
+                className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
+                style={{ background: 'var(--surface-warm)', color: 'var(--accent)', border: '1px solid var(--line)' }}
+              >
+                {set.level}
+              </span>
+            )}
+          </div>
+          {set.description && (
+            <p className="text-xs mb-2 line-clamp-1" style={{ color: 'var(--text-3)' }}>{set.description}</p>
+          )}
+
+          <div className="flex items-center gap-2 flex-wrap text-[10px]" style={{ color: 'var(--text-3)' }}>
+            <span className="font-semibold">共 {set.total} 题</span>
+            {set.chapter_count > 0 && <span>· {set.chapter_count} 个章节</span>}
+            {dist.map(d => (
+              <span
+                key={d.label}
+                className="px-1.5 py-0.5 rounded-full"
+                style={{ background: 'var(--chip-bg-soft)', border: '1px solid var(--chip-border)' }}
+              >
+                {d.label} {d.n}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <ChevronRightIcon size={16} className="mt-2 flex-shrink-0" color="var(--text-3)" />
+      </div>
+    </button>
+  )
+}
+
+export function QuestionBankScreen({ onStartPractice, onOpenBankSeries, restoreSetId, onRestoreConsumed }: QuestionBankScreenProps) {
   const [activeCategory, setActiveCategory] = useState<(typeof ALL_CATS)[number]>('全部')
   const [searchText, setSearchText] = useState('')
   const [showFilter, setShowFilter] = useState(false)
@@ -45,9 +162,12 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
   /* ── 题库概览（实时） ── */
   const [bank, setBank] = useState<BankSummary | null>(null)
   const [sets, setSets] = useState<BankSet[] | null>(null)
+  const [series, setSeries] = useState<BankSeries[]>([])
   const [bankError, setBankError] = useState('')
   const [loading, setLoading] = useState(true)
   const [reloadTick, setReloadTick] = useState(0)
+  /* 整屏进场动效：切分类 / 重载题库数据时，分区再错峰播一次（不重挂载 → 搜索框不丢焦点） */
+  const staggerRef = useStagger<HTMLDivElement>(`${activeCategory}-${reloadTick}`)
 
   /* ── 搜索（防抖） ── */
   const [searchResults, setSearchResults] = useState<BankSearchItem[] | null>(null)
@@ -62,11 +182,12 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
 
   useEffect(() => {
     let cancelled = false
-    Promise.all([bankApi.summary(), bankApi.sets()])
-      .then(([summary, setsRes]) => {
+    Promise.all([bankApi.summary(), bankApi.sets(), bankApi.series()])
+      .then(([summary, setsRes, seriesRes]) => {
         if (cancelled) return
         setBank(summary)
         setSets(setsRes.items)
+        setSeries(seriesRes.items)
         setBankError('')
       })
       .catch((err: unknown) => {
@@ -79,6 +200,15 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
       cancelled = true
     }
   }, [reloadTick])
+
+  /* v1.76 从本页进的练习，退出 / 交卷后回到题库页：等数据拉回来，自动重新展开那套题库的练习面板
+     （考生接着选别的章节，不用重新找一遍）；消费完通知 App 清空标记 */
+  useEffect(() => {
+    if (restoreSetId == null || !sets) return
+    const hit = sets.find(s => s.id === restoreSetId)
+    if (hit) setPickerSet(hit)
+    onRestoreConsumed?.()
+  }, [restoreSetId, sets, onRestoreConsumed])
 
   useEffect(() => {
     const kw = searchText.trim()
@@ -130,19 +260,27 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
   /* 检测方法卡片：只展示真实存在题目的方向（内置一级题库） */
   const methodCards = (bank?.methods ?? []).filter(m => m.count > 0 && m.method !== 'ZD')
 
-  /* 题库列表：管理员在后台「题库管理」创建的题库（有题才返回） */
-  const bankSets = sets ?? []
-  const filteredSets = bankSets.filter(ts => {
-    if (activeCategory !== '全部' && ts.level !== activeCategory) return false
+  /* 题库系列：按分类 Tab 的「方向」过滤（通用系列在所有 Tab 下都显示） */
+  const filteredSeries = series.filter(s => {
+    if (activeCategory !== '全部' && s.method && s.method !== activeCategory) return false
     const kw = searchText.trim()
-    return !kw || ts.name.includes(kw)
+    return !kw || s.name.includes(kw) || (s.description || '').includes(kw)
   })
+
+  /* 其他题库 = 没归入任何系列的散题库；只在「全部」Tab 下平铺 */
+  const looseSets = (sets ?? [])
+    .filter(s => !s.series_id)
+    .filter(s => {
+      const kw = searchText.trim()
+      return !kw || s.name.includes(kw)
+    })
+  const showLoose = activeCategory === '全部'
 
   const isSearchMode = !!searchText.trim()
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 110 }}>
+      <div className="ui-stagger" ref={staggerRef} style={{ paddingBottom: 110 }}>
         {/* 标题 */}
         <div className="px-5 pt-14 pb-4">
           <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--text-1)', letterSpacing: '-0.015em' }}>题库</h1>
@@ -248,7 +386,7 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
                       </span>
                     </div>
                     <p className="text-sm line-clamp-2 leading-relaxed" style={{ color: 'var(--text-1)' }}>
-                      {item.content}
+                      {stripRichText(item.content)}
                     </p>
                   </button>
                 ))}
@@ -299,70 +437,49 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
           </div>
         )}
 
-        {/* 题库列表（管理员在后台「题库管理」创建，从数据库动态获取） */}
-        {!isSearchMode && (
+        {/* ① 题库系列（管理员在后台建的分组，点进系列详情页） */}
+        {!isSearchMode && filteredSeries.length > 0 && (
+          <div className="px-4 mb-6">
+            <div className="flex items-center justify-between px-0.5 mb-3">
+              <span className="text-[10px] font-bold tracking-wider uppercase" style={{ color: 'var(--text-3)' }}>
+                题库系列
+              </span>
+              <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{filteredSeries.length} 个系列</span>
+            </div>
+            <div className="space-y-3">
+              {filteredSeries.map(s => (
+                <BankSeriesCard key={s.id} series={s} onOpen={() => onOpenBankSeries(s)} />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ② 其他题库：没归入系列的散题库（选了具体方向 Tab 时不显示，它们没有方向归属） */}
+        {!isSearchMode && showLoose && (
           <div className="px-4">
-            <h3 className="font-semibold text-sm mb-3" style={{ color: 'var(--text-1)' }}>题库</h3>
+            <div className="flex items-center justify-between px-0.5 mb-3">
+              <span className="text-[10px] font-bold tracking-wider uppercase" style={{ color: 'var(--text-3)' }}>
+                {filteredSeries.length > 0 ? '其他题库' : '题库'}
+              </span>
+              {filteredSeries.length > 0 && (
+                <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{looseSets.length} 套</span>
+              )}
+            </div>
 
             {loading ? (
               <p className="text-sm py-6 text-center" style={{ color: 'var(--text-3)' }}>题库加载中…</p>
-            ) : filteredSets.length === 0 ? (
+            ) : looseSets.length === 0 ? (
               <div className="flex flex-col items-center py-12 gap-3">
                 <SearchIcon size={36} color="var(--text-3)" />
                 <div className="font-medium text-sm" style={{ color: 'var(--text-2)' }}>暂无其他题库</div>
-                <div className="text-xs" style={{ color: 'var(--text-3)' }}>管理员可在管理后台「题库管理」创建题库并上传题目</div>
+                <div className="text-xs text-center px-6" style={{ color: 'var(--text-3)' }}>
+                  管理员可在管理后台「题库管理」新建题库、建章节并导入 CSV
+                </div>
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredSets.map(ts => (
-                  <button
-                    key={ts.id}
-                    onClick={() => setPickerSet(ts)}
-                    className="w-full card p-4 text-left card-tap"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-sm font-bold flex-shrink-0"
-                        style={{ background: 'var(--accent-weak)', color: 'var(--accent)', border: '1px solid var(--accent-border)' }}
-                      >
-                        库{ts.id % 100}
-                      </div>
-
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-sm truncate" style={{ color: 'var(--text-1)' }}>{ts.name}</span>
-                          {ts.level && (
-                            <span
-                              className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                              style={{ background: 'var(--surface-warm)', color: 'var(--accent)', border: '1px solid var(--line)' }}
-                            >
-                              {ts.level}
-                            </span>
-                          )}
-                        </div>
-                        {ts.description && (
-                          <p className="text-xs mb-2 line-clamp-1" style={{ color: 'var(--text-3)' }}>{ts.description}</p>
-                        )}
-
-                        <div className="flex items-center gap-2 flex-wrap text-[10px]" style={{ color: 'var(--text-3)' }}>
-                          <span className="font-semibold">共 {ts.total} 题</span>
-                          {Object.entries(ts.qtype_counts || {}).map(([q, n]) =>
-                            n > 0 && QTYPE_LABELS[q] ? (
-                              <span
-                                key={q}
-                                className="px-1.5 py-0.5 rounded-full"
-                                style={{ background: 'var(--chip-bg-soft)', border: '1px solid var(--chip-border)' }}
-                              >
-                                {QTYPE_LABELS[q]} {n}
-                              </span>
-                            ) : null,
-                          )}
-                        </div>
-                      </div>
-
-                      <ChevronRightIcon size={16} className="mt-2 flex-shrink-0" color="var(--text-3)" />
-                    </div>
-                  </button>
+                {looseSets.map(ts => (
+                  <BankSetCard key={ts.id} set={ts} onOpen={() => setPickerSet(ts)} />
                 ))}
               </div>
             )}
@@ -385,7 +502,7 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
         />
       )}
 
-      {/* ── 自定义题库练习面板 ── */}
+      {/* ── 自定义题库练习面板（整套题库 / 按章节） ── */}
       {pickerSet && (
         <SetPracticeSheet
           set={pickerSet}
@@ -393,7 +510,13 @@ export function QuestionBankScreen({ onStartPractice }: QuestionBankScreenProps)
           onStart={(opts) => {
             const target = pickerSet
             setPickerSet(null)
-            onStartPractice('综合', { setId: target.id, qtype: opts.qtype, setTitle: target.name })
+            onStartPractice('综合', {
+              setId: target.id,
+              topic: opts.topic,
+              qtype: opts.qtype,
+              // 练习顶栏标题：按章节练时带上章节名，考生一眼知道在练哪一章
+              setTitle: opts.topic ? `${target.name} · ${opts.topic}` : target.name,
+            })
           }}
         />
       )}
@@ -748,177 +871,6 @@ function PracticePickerSheet({ category, categoryName, qtypeCounts, onClose, onS
                 ))}
               </div>
             )
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ============================================================
-   自定义题库练习面板（底部弹层，z-[60] 盖过底部导航 z-50）
-   管理员后台创建的题库：先选题型（全部/判断/选择/计算/简答，实时题数，空题型隐藏）
-   → 开始练习；垃圾桶 = 清除该题库我的做题记录（两步确认）
-   ============================================================ */
-
-interface SetPracticeSheetProps {
-  set: BankSet
-  onClose: () => void
-  onStart: (opts: { qtype?: string }) => void
-}
-
-function SetPracticeSheet({ set, onClose, onStart }: SetPracticeSheetProps) {
-  /* 选中题型：'' = 全部 */
-  const [qtype, setQtype] = useState('')
-  /* 该题库整体做题统计（借 blocks 接口聚合，set_id 维度） */
-  const [seqStat, setSeqStat] = useState<{ total: number; answered: number; correct: number; wrong: number } | null>(null)
-  const [confirmClear, setConfirmClear] = useState(false)
-  const [clearing, setClearing] = useState(false)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    let cancelled = false
-    practiceApi
-      .blocks('综合', undefined, 20, set.id)
-      .then(res => {
-        if (cancelled) return
-        const agg = res.blocks.reduce(
-          (s, b) => ({ total: s.total + b.count, answered: s.answered + b.answered, correct: s.correct + b.correct, wrong: s.wrong + b.wrong }),
-          { total: 0, answered: 0, correct: 0, wrong: 0 },
-        )
-        setSeqStat(agg)
-      })
-      .catch(() => {
-        if (!cancelled) setSeqStat({ total: 0, answered: 0, correct: 0, wrong: 0 })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [set.id])
-
-  const handleClear = () => {
-    if (clearing) return
-    if (!confirmClear) {
-      setConfirmClear(true)
-      return
-    }
-    setClearing(true)
-    practiceApi
-      .reset('综合', undefined, set.id)
-      .then(() => {
-        setConfirmClear(false)
-        setError('')
-        setSeqStat({ total: 0, answered: 0, correct: 0, wrong: 0 })
-      })
-      .catch((err: unknown) => setError(err instanceof Error ? err.message : '清除失败'))
-      .finally(() => setClearing(false))
-  }
-
-  /* 有题的题型选项（全部 + 各题型） */
-  const qtypeOptions = [
-    { code: '', label: '全部', count: set.total },
-    ...Object.entries(QTYPE_LABELS)
-      .map(([code, label]) => ({ code, label, count: set.qtype_counts?.[code] ?? 0 }))
-      .filter(o => o.count > 0),
-  ]
-  const picked = qtypeOptions.find(o => o.code === qtype)
-  const pickedCount = picked ? picked.count : set.total
-
-  return (
-    <div className="fixed inset-0 z-[60]">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div
-        className="absolute bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] rounded-t-3xl anim-sheet-in"
-        style={{ background: 'var(--surface-raised)', border: '1px solid var(--line)', boxShadow: '0 -4px 24px rgba(27,30,35,0.08)', maxHeight: '82vh' }}
-      >
-        <div className="flex justify-center pt-3 pb-1 flex-shrink-0">
-          <div className="w-10 h-1 rounded-full" style={{ background: 'var(--hairline)' }} />
-        </div>
-
-        <div className="px-5 pt-2 pb-6">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2 min-w-0">
-              <h3 className="font-bold text-lg truncate" style={{ color: 'var(--text-1)' }}>{set.name}</h3>
-              {set.level && (
-                <span
-                  className="text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0"
-                  style={{ background: 'var(--surface-warm)', color: 'var(--accent)', border: '1px solid var(--line)' }}
-                >
-                  {set.level}
-                </span>
-              )}
-            </div>
-            <button onClick={onClose} className="text-xs tap flex-shrink-0" style={{ color: 'var(--text-3)' }}>关闭</button>
-          </div>
-
-          <p className="text-xs mb-2" style={{ color: 'var(--text-2)' }}>选择题目类型</p>
-          <div className="flex flex-wrap gap-2 mb-4">
-            {qtypeOptions.map(o => {
-              const active = qtype === o.code
-              return (
-                <button
-                  key={o.code || 'all'}
-                  onClick={() => { setQtype(o.code); setConfirmClear(false) }}
-                  className={`px-3 h-8 rounded-full text-xs font-semibold transition-colors duration-200 gb-pill ${active ? 'gb-soft' : ''}`}
-                  style={{
-                    background: active ? 'var(--accent-fill)' : 'var(--chip-bg-soft)',
-                    color: active ? '#fff' : 'var(--text-2)',
-                    border: active ? '1px solid var(--accent-border)' : '1px solid var(--chip-border)',
-                  }}
-                >
-                  {o.label} · {o.count}
-                </button>
-              )
-            })}
-          </div>
-
-          {error && <p className="text-xs mb-3" style={{ color: 'var(--err)' }}>{error}</p>}
-
-          {/* 开始练习 + 清除记录 */}
-          <div className="flex items-center gap-2 rounded-xl px-3 py-3" style={{ background: 'var(--surface-warm)', border: '1px solid var(--line)' }}>
-            <button
-              onClick={() => onStart({ qtype: qtype || undefined })}
-              disabled={pickedCount === 0}
-              className="flex-1 flex items-center gap-3 text-left min-w-0 tap"
-              style={{ opacity: pickedCount === 0 ? 0.5 : 1 }}
-            >
-              <span
-                className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
-                style={{ background: 'var(--accent-weak)', color: 'var(--accent)' }}
-              >
-                <PlayIcon size={15} />
-              </span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold" style={{ color: 'var(--text-1)' }}>
-                  开始练习 · {pickedCount} 题
-                </div>
-                <div className="text-[10px] mt-0.5" style={{ color: 'var(--text-3)' }}>
-                  {seqStat && seqStat.answered > 0
-                    ? <span>上次已做 {seqStat.answered} 题（对 {seqStat.correct} / 错 {seqStat.wrong}）</span>
-                    : '顺序练习，做过标记会一直保留'}
-                </div>
-              </div>
-              <ChevronRightIcon size={15} color="var(--text-3)" />
-            </button>
-            <button
-              onClick={handleClear}
-              disabled={clearing || !seqStat || seqStat.answered === 0}
-              aria-label="清除该题库做题记录"
-              className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 tap"
-              style={{
-                background: confirmClear ? 'var(--err-weak)' : 'transparent',
-                border: confirmClear ? '1px solid var(--err-border)' : '1px solid var(--line)',
-                color: confirmClear ? 'var(--err)' : 'var(--text-3)',
-                opacity: clearing ? 0.6 : 1,
-              }}
-            >
-              {confirmClear ? <span className="text-[10px] font-bold">确认</span> : <TrashIcon size={14} />}
-            </button>
-          </div>
-          {confirmClear && (
-            <p className="text-[10px] mt-2" style={{ color: 'var(--err)' }}>
-              再点一次垃圾桶确认清除（只删我在这套题库的记录，不可恢复）
-            </p>
           )}
         </div>
       </div>

@@ -1,0 +1,9 @@
+{
+  "navigationBarTitleText": "NDT无损检测刷题",
+  "navigationBarBackgroundColor": "#F3F4F6",
+  "navigationBarTextStyle": "black",
+  "backgroundColor": "#F3F4F6",
+  "backgroundTextStyle": "dark",
+  "disableSwipeBack": true,
+  "usingComponents": {}
+}

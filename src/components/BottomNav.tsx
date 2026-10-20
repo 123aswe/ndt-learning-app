@@ -1,6 +1,6 @@
 import React from 'react'
 import type { Tab } from '../types'
-import { HomeIcon, GridIcon, ChartIcon, UserIcon, BookIcon } from './icons'
+import { HomeIcon, GridIcon, MusicIcon, UserIcon, BookIcon } from './icons'
 
 interface BottomNavProps {
   activeTab: Tab
@@ -12,12 +12,14 @@ interface BottomNavProps {
    - 标签文字保持深色高可读性（浅色玻璃上白字不可读）
    修改注意：胶囊样式在 index.css `.nav-liquid`，微交互在下方 tabItem
    - 「错题」入口已移到「我的」页（错题集 / 成绩记录 / 观看历史）
+   - 「学习」入口已移到「我的 → 学习记录」（Tab 位换成「音乐」播放页），
+     learning 仍保留在 Tab 类型里（状态机 / 页面记忆 / 我的页跳转用）
    - 「教材/视频」Tab：第二阶段接视频课程与电子教材，看完自动记入观看历史 */
 const tabs: Array<{ id: Tab; label: string; icon: (active: boolean) => React.ReactNode }> = [
   { id: 'home', label: '首页', icon: (a) => <HomeIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
   { id: 'questions', label: '题库', icon: (a) => <GridIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
   { id: 'materials', label: '教材/视频', icon: (a) => <BookIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
-  { id: 'learning', label: '学习', icon: (a) => <ChartIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
+  { id: 'music', label: '音乐', icon: (a) => <MusicIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
   { id: 'profile', label: '我的', icon: (a) => <UserIcon size={21} color={a ? 'var(--accent)' : undefined} strokeWidth={a ? 2 : 1.7} /> },
 ]
 

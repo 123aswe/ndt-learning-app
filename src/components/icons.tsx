@@ -158,6 +158,42 @@ export const PercentIcon = (p: IconProps) => base(p, (
 ))
 export const ZapIcon = (p: IconProps) => base(p, <path d="M13 3 5 13.5h5.4L9.6 21 19 10.5h-5.6z" />)
 export const StarIcon = (p: IconProps) => base(p, <path d="M12 3.6l2.5 5.1 5.6.8-4 4 .9 5.6-5-2.7-5 2.7.9-5.6-4-4 5.6-.8z" />)
+export const MusicIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M9 18.5V6.6l9.5-2.1V16" />
+    <circle cx="6.7" cy="18.5" r="2.3" />
+    <circle cx="16.2" cy="16" r="2.3" />
+  </>
+))
+export const PauseIcon = (p: IconProps) => base(p, <path d="M8.6 5.5v13M15.4 5.5v13" />)
+export const SkipBackIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M18.5 6.3v11.4L9.2 12z" />
+    <path d="M5.5 6.2v11.6" />
+  </>
+))
+export const SkipForwardIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M5.5 6.3v11.4L14.8 12z" />
+    <path d="M18.5 6.2v11.6" />
+  </>
+))
+export const MoreIcon = (p: IconProps) => base(p, (
+  <>
+    <circle cx="5" cy="12" r="0.6" />
+    <circle cx="12" cy="12" r="0.6" />
+    <circle cx="19" cy="12" r="0.6" />
+  </>
+))
+/* 调色盘：主题商店（背景 + 配色皮肤） */
+export const PaletteIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M12 3.6c-4.5 0-8.2 3.4-8.2 7.7 0 3 2.3 5.4 5.2 5.4h1.5c.9 0 1.6.7 1.6 1.6 0 .4-.1.7-.3 1-.2.3-.3.6-.3 1 0 .8.7 1.5 1.5 1.5 4.6 0 8.2-3.4 8.2-7.7 0-5.2-4-10.5-9.2-10.5z" />
+    <circle cx="8" cy="10.4" r="1.05" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="8.1" r="1.05" fill="currentColor" stroke="none" />
+    <circle cx="16" cy="10.4" r="1.05" fill="currentColor" stroke="none" />
+  </>
+))
 export const ActivityIcon = (p: IconProps) => base(p, (
   <path d="M3 12h4l2.5-6.5L14 18l2.5-6H21" />
 ))
@@ -190,7 +226,100 @@ export const RefreshIcon = (p: IconProps) => base(p, (
     <path d="M4 3.5v3.6h3.6" />
   </>
 ))
+/* 刷新（可爱版）：顺时针环绕箭头 + 两端圆点箭羽，比 RefreshIcon 更圆润俏皮 ——
+   音乐页「点击刷新」按钮专用（v1.65） */
+export const RefreshCuteIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M19.4 8.1A7.8 7.8 0 1 0 19.8 14" />
+    <path d="M16.2 7.3l3.7.6.6-3.7" />
+    <circle cx="4.9" cy="14.6" r="0.55" />
+    <circle cx="8.4" cy="18.4" r="0.55" />
+  </>
+))
 export const PlayIcon = (p: IconProps) => base(p, <path d="M8 5.5v13l10-6.5z" />)
+
+/* ── v1.73 播放/暂停「形态过渡」图标（只给播放页主按钮用） ──
+   原理：同一个 <path> 的两个状态写成**命令结构完全一致**的 d，
+   靠 CSS 过渡 d 属性做真正的形态插值（Material Symbols 的做法）。
+   · 两个子路径都是 M/L/L/L/Z：子路径 1 = 左竖条 → 三角形；
+     子路径 2 = 右竖条 → 收缩成一个点（视觉上被三角形吸收）。
+   · stroke 与 fill 同色 + strokeLinejoin:round：给直角描一圈圆角，
+     视觉上与全站线性图标的圆头风格一致。
+   · 内核不支持 d 插值（如 Firefox）时自动降级为「缩放 + 交叉淡入」，
+     仍然平滑，绝不出现硬切。
+   ⚠️ 不要删旧的 PlayIcon / PauseIcon：首页悬浮条、迷你面板、榜单等处还在用。 */
+export const PLAUSE_PAUSE_D =
+  'M7.6 5.5L7.6 18.5L9.6 18.5L9.6 5.5Z M14.4 5.5L14.4 18.5L16.4 18.5L16.4 5.5Z'
+export const PLAUSE_PLAY_D =
+  'M7.6 5.5L7.6 18.5L18.6 12L18.6 12Z M18.6 11.85L18.6 12.15L18.6 12.15L18.6 11.85Z'
+
+const SUPPORTS_PATH_MORPH =
+  typeof CSS !== 'undefined' && typeof CSS.supports === 'function' && CSS.supports('d', 'path("M0 0")')
+
+export function PlayPauseIcon({
+  playing,
+  size = 28,
+  className = '',
+  color,
+}: {
+  playing: boolean
+  size?: number
+  className?: string
+  color?: string
+}) {
+  const c = color || 'currentColor'
+  if (SUPPORTS_PATH_MORPH) {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" className={className} aria-hidden="true">
+        <path
+          className="music-playpath"
+          d={playing ? PLAUSE_PAUSE_D : PLAUSE_PLAY_D}
+          fill={c}
+          stroke={c}
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    )
+  }
+  const fade = (show: boolean) => ({
+    position: 'absolute' as const,
+    inset: 0,
+    opacity: show ? 1 : 0,
+    transform: show ? 'scale(1)' : 'scale(0.72)',
+    transition: 'opacity 0.24s ease, transform 0.24s cubic-bezier(0.22,1,0.36,1)',
+  })
+  return (
+    <span
+      className={className}
+      style={{ position: 'relative', display: 'inline-block', width: size, height: size }}
+      aria-hidden="true"
+    >
+      <svg viewBox="0 0 24 24" width={size} height={size} style={fade(!playing)}>
+        <path
+          d="M7.6 5.5L7.6 18.5L18.6 12Z"
+          fill={c}
+          stroke={c}
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+      <svg viewBox="0 0 24 24" width={size} height={size} style={fade(playing)}>
+        <path
+          d={PLAUSE_PAUSE_D}
+          fill={c}
+          stroke={c}
+          strokeWidth="1.4"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
+      </svg>
+    </span>
+  )
+}
+
 export const CalendarIcon = (p: IconProps) => base(p, (
   <>
     <rect x="3.5" y="5" width="17" height="15.5" rx="2.2" />
@@ -201,6 +330,14 @@ export const ListIcon = (p: IconProps) => base(p, (
   <>
     <path d="M9 6.5h11M9 12h11M9 17.5h11" />
     <path d="M4 6.5h.5M4 12h.5M4 17.5h.5" />
+  </>
+))
+/** 系列 / 分组（叠层）*/
+export const LayersIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M12 3.8 3.8 8l8.2 4.2L20.2 8 12 3.8Z" />
+    <path d="M3.8 12.6 12 16.8l8.2-4.2" />
+    <path d="M3.8 16.9 12 21.1l8.2-4.2" />
   </>
 ))
 export const InfoIcon = (p: IconProps) => base(p, (
@@ -239,5 +376,36 @@ export const TrashIcon = (p: IconProps) => base(p, (
     <path d="M4.5 6.5h15M9.5 6V4.8A1.3 1.3 0 0 1 10.8 3.5h2.4a1.3 1.3 0 0 1 1.3 1.3V6" />
     <path d="M6.5 6.5l.8 12a1.6 1.6 0 0 0 1.6 1.5h6.2a1.6 1.6 0 0 0 1.6-1.5l.8-12" />
     <path d="M10 10.5v6M14 10.5v6" />
+  </>
+))
+export const GlobeIcon = (p: IconProps) => base(p, (
+  <>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M3.5 12h17" />
+    <path d="M12 3.5c2.4 2.3 3.7 5.3 3.7 8.5s-1.3 6.2-3.7 8.5c-2.4-2.3-3.7-5.3-3.7-8.5s1.3-6.2 3.7-8.5z" />
+  </>
+))
+/** 排序（上下双箭头）：资料 / 视频列表的「顺序 · 倒序」切换按钮用 */
+export const SortIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M8 20V4.5M8 4.5 4.6 8M8 4.5 11.4 8" />
+    <path d="M16 4v15.5M16 19.5 12.6 16M16 19.5 19.4 16" />
+  </>
+))
+
+/* ── AI 智能助手 ── */
+/** 星光（AI）：一颗大的四角星 + 两颗小星，用于「AI 解析 / AI 概括」入口 */
+export const SparklesIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M11 3.5c.9 3.1 1.9 4.1 5 5-3.1.9-4.1 1.9-5 5-.9-3.1-1.9-4.1-5-5 3.1-.9 4.1-1.9 5-5z" />
+    <path d="M18 14.5c.45 1.55.95 2.05 2.5 2.5-1.55.45-2.05.95-2.5 2.5-.45-1.55-.95-2.05-2.5-2.5 1.55-.45 2.05-.95 2.5-2.5z" />
+    <path d="M6.6 16.4c.3 1.05.65 1.4 1.7 1.7-1.05.3-1.4.65-1.7 1.7-.3-1.05-.65-1.4-1.7-1.7 1.05-.3 1.4-.65 1.7-1.7z" />
+  </>
+))
+/** 文档摘要：三横线 + 右下角小星，用于「视频 AI 概括」入口 */
+export const SummaryIcon = (p: IconProps) => base(p, (
+  <>
+    <path d="M5 5.5h11M5 9.5h9M5 13.5h6" />
+    <path d="M17.5 12.6c.4 1.5.9 2 2.4 2.4-1.5.4-2 .9-2.4 2.4-.4-1.5-.9-2-2.4-2.4 1.5-.4 2-.9 2.4-2.4z" />
   </>
 ))

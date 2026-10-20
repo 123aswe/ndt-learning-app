@@ -19,7 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from config import sms_mode, sms_ready
-from database import get_conn, now_iso, row_to_dict
+from database import get_conn, is_expired, now_iso, row_to_dict
 from deps import (
     ADMIN,
     USER,
@@ -29,6 +29,7 @@ from deps import (
     get_current_user,
     revoke_session,
 )
+from modules import realtime
 from security import hash_password, verify_password
 
 router = APIRouter(prefix="/api/auth", tags=["认证"])
@@ -44,6 +45,7 @@ class AdminLoginBody(BaseModel):
 class PasswordLoginBody(BaseModel):
     account: str = Field(..., min_length=1, max_length=64, description="管理员用户名 或 考生账号")
     password: str = Field(..., min_length=1, max_length=128)
+    force: bool = Field(False, description="账号已在其他设备登录时，传 True 表示确认顶掉旧会话强制登录")
 
 
 class ChangePasswordBody(BaseModel):
@@ -120,6 +122,30 @@ def password_login(body: PasswordLoginBody):
     if user and verify_password(body.password, user.get("password_hash")):
         if not user["status"]:
             raise HTTPException(status_code=403, detail="该账号已被禁用，请联系管理员")
+
+        # ── 单端登录（一个账号同时只能有一台设备在线） ──
+        # 已有未过期会话且未确认顶号 → 不发令牌，返回 conflict 让登录页弹「同意 / 拒绝」；
+        # 同意后带 force=True 重登：删掉旧会话（旧设备下次请求即 401 被踢回登录页），
+        # 并通过实时通道推 kick，让在线端立刻退出。
+        with get_conn() as conn:
+            active = conn.execute(
+                "SELECT COUNT(*) AS n FROM sessions "
+                "WHERE subject_type = 'user' AND subject_id = ? AND expires_at > ?",
+                (user["id"], now_iso()),
+            ).fetchone()["n"]
+        if active > 0 and not body.force:
+            return {
+                "conflict": True,
+                "message": "该账号已在其他设备登录。同意后将退出对方并登录本机，拒绝则取消本次登录。",
+            }
+        if active > 0 and body.force:
+            with get_conn() as conn:
+                conn.execute(
+                    "DELETE FROM sessions WHERE subject_type = 'user' AND subject_id = ?",
+                    (user["id"],),
+                )
+            realtime.kick_session(user["id"], "你的账号在其他设备上登录，本机已退出登录")
+
         session = create_session(USER, user["id"])
         _touch_login("user_accounts", user["id"])
         return {

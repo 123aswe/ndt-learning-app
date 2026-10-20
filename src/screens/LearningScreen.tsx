@@ -1,18 +1,21 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { statsApi, type UserStatsReport } from '../api/client'
-import { PencilIcon, TargetIcon, ClockIcon, FlameIcon, CalendarIcon, InfoIcon, ChevronRightIcon } from '../components/icons'
+import { PencilIcon, TargetIcon, ClockIcon, FlameIcon, CalendarIcon, InfoIcon, ChevronRightIcon, ChevronLeftIcon } from '../components/icons'
+import { useStagger } from '../hooks/useStagger'
 
 /* ============================================================
    学习报告页（苹果式浅色）
    结构保持：标题 / 周期切换 / 汇总数字卡 / 学习日历 / 知识掌握度 / 学习建议 / 周目标
    数据全部实时：GET /api/user/stats/report?period=week|month
    - 汇总数字：周期内答题 / 正确率 / 时长（session 去重）/ 连续打卡
-   - 学习日历：近 35 天每日答题量（接口返回，不再随机生成）
+   - 学习日历：近 140 天每日答题量（接口返回），前端组装为真实月历（可翻月/选日期）
    - 知识掌握度：按方向全量统计的正确率
    ============================================================ */
 
 interface LearningScreenProps {
   onStartPractice: (categoryId: string) => void
+  /** 返回上一级（我的页） */
+  onBack?: () => void
 }
 
 /** 目标常量（与产品口径一致：周 300 题 / 300 分钟 / 正确率 85%） */
@@ -20,42 +23,173 @@ const GOAL_QUESTIONS = 300
 const GOAL_MINUTES = 300
 const GOAL_ACCURACY = 85
 
-function CalendarHeatmap({ calendar }: { calendar: UserStatsReport['calendar'] }) {
-  const maxCount = Math.max(1, ...calendar.map(d => d.count))
-  const dayLabels = ['一', '二', '三', '四', '五', '六', '日']
+/* ============================================================
+   学习日历（Material Design 3 风格真实月历）
+   - 后端返回近 140 天每日答题量，前端按「月」组装真实月历
+   - 左右翻月（限制在数据起点 ~ 本月）、点选任意日期
+   - 每个日期格：日期数字 + 当日答题量；色深映射答题量
+   - 全部颜色走语义令牌（color-mix 引用 --accent），深浅色主题自适应
+   ============================================================ */
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const fmtDate = (y: number, m: number, d: number) => `${y}-${pad2(m)}-${pad2(d)}`
+const WEEKDAY_LABELS = ['一', '二', '三', '四', '五', '六', '日']
+
+function StudyCalendar({ calendar }: { calendar: UserStatsReport['calendar'] }) {
+  const byDate = useMemo(() => new Map(calendar.map(d => [d.date, d.count])), [calendar])
+  const maxCount = useMemo(() => Math.max(1, ...calendar.map(d => d.count)), [calendar])
+
+  const now = new Date()
+  const todayStr = fmtDate(now.getFullYear(), now.getMonth() + 1, now.getDate())
+  const [view, setView] = useState(() => ({ y: now.getFullYear(), m: now.getMonth() + 1 }))
+  const [selected, setSelected] = useState(todayStr)
+
+  /* 可翻阅范围：数据最早一天所在月 ~ 本月 */
+  const minBound = useMemo(() => {
+    if (calendar.length > 0) {
+      const [y, m] = calendar[0].date.split('-').map(Number)
+      return { y, m }
+    }
+    return { y: now.getFullYear(), m: now.getMonth() + 1 }
+  }, [calendar])
+  const curBound = { y: now.getFullYear(), m: now.getMonth() + 1 }
+  const cmp = (a: { y: number; m: number }, b: { y: number; m: number }) => a.y * 12 + a.m - (b.y * 12 + b.m)
+  const canPrev = cmp(view, minBound) > 0
+  const canNext = cmp(view, curBound) < 0
+
+  const shiftMonth = (dir: 1 | -1) => {
+    if (dir === -1 && !canPrev) return
+    if (dir === 1 && !canNext) return
+    const next = view.m + dir > 12 ? { y: view.y + 1, m: 1 } : view.m + dir < 1 ? { y: view.y - 1, m: 12 } : { y: view.y, m: view.m + dir }
+    setView(next)
+    /* 翻月后自动选中：本月选今天，历史月选该月最近一个有记录的日子，否则选 1 号 */
+    const daysIn = new Date(next.y, next.m, 0).getDate()
+    let pick = next.y === curBound.y && next.m === curBound.m ? todayStr : ''
+    if (!pick) {
+      for (let d = daysIn; d >= 1; d--) {
+        const s = fmtDate(next.y, next.m, d)
+        if ((byDate.get(s) ?? 0) > 0 && s <= todayStr) { pick = s; break }
+      }
+    }
+    setSelected(pick || fmtDate(next.y, next.m, 1))
+  }
+
+  /* 组装 6×7 网格（周一开头），不足补空 */
+  const firstDow = (new Date(view.y, view.m - 1, 1).getDay() + 6) % 7 // 周一=0
+  const daysInMonth = new Date(view.y, view.m, 0).getDate()
+  const cells: (number | null)[] = [
+    ...Array.from({ length: firstDow }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ]
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const selCount = byDate.get(selected) ?? 0
+  const selDate = selected ? new Date(Number(selected.slice(0, 4)), Number(selected.slice(5, 7)) - 1, Number(selected.slice(8, 10))) : null
+  const selLabel = selDate
+    ? `${selDate.getMonth() + 1}月${selDate.getDate()}日 周${'日一二三四五六'[selDate.getDay()]}`
+    : ''
 
   return (
     <div>
-      <div className="flex gap-1 mb-1.5">
-        {dayLabels.map(d => (
-          <div key={d} className="flex-1 text-center text-[9px]" style={{ color: 'var(--text-3)' }}>{d}</div>
+      {/* 月份切换行 */}
+      <div className="flex items-center justify-between mb-3">
+        <button
+          onClick={() => shiftMonth(-1)}
+          disabled={!canPrev}
+          aria-label="上一月"
+          className="w-8 h-8 rounded-full flex items-center justify-center tap transition-colors duration-150 disabled:opacity-30"
+          style={{ color: 'var(--text-2)' }}
+        >
+          <ChevronLeftIcon size={16} />
+        </button>
+        <span className="text-sm font-semibold" style={{ color: 'var(--text-1)', fontVariantNumeric: 'tabular-nums' }}>
+          {view.y} 年 {view.m} 月
+        </span>
+        <button
+          onClick={() => shiftMonth(1)}
+          disabled={!canNext}
+          aria-label="下一月"
+          className="w-8 h-8 rounded-full flex items-center justify-center tap transition-colors duration-150 disabled:opacity-30"
+          style={{ color: 'var(--text-2)' }}
+        >
+          <ChevronRightIcon size={16} />
+        </button>
+      </div>
+
+      {/* 星期行 */}
+      <div className="grid gap-1 mb-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        {WEEKDAY_LABELS.map(d => (
+          <div key={d} className="text-center text-[9px] font-medium" style={{ color: 'var(--text-3)' }}>{d}</div>
         ))}
       </div>
-      <div className="grid gap-1.5" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
-        {calendar.map((day, i) => {
-          const active = day.count > 0
-          const intensity = 0.10 + (day.count / maxCount) * 0.55
+
+      {/* 日期网格 */}
+      <div className="grid gap-1" style={{ gridTemplateColumns: 'repeat(7, 1fr)' }}>
+        {cells.map((day, i) => {
+          if (day === null) return <div key={`e${i}`} />
+          const dateStr = fmtDate(view.y, view.m, day)
+          const count = byDate.get(dateStr) ?? 0
+          const isFuture = dateStr > todayStr
+          const isToday = dateStr === todayStr
+          const isSelected = dateStr === selected
+          const intensity = count > 0 ? Math.round(8 + (count / maxCount) * 34) : 0
+
           return (
-            <div
-              key={day.date}
-              title={`${day.date} · ${day.count} 题`}
-              className="aspect-square rounded-md"
+            <button
+              key={dateStr}
+              onClick={() => !isFuture && setSelected(dateStr)}
+              disabled={isFuture}
+              className="aspect-square rounded-full flex flex-col items-center justify-center tap transition-all duration-150 disabled:cursor-default"
               style={{
-                background: i === calendar.length - 1
-                  ? 'var(--accent)'
-                  : active
-                  ? `rgba(95, 141, 140, ${intensity})`
+                /* 选中格＝低饱和淡青底 + 主色细环（M3 tonal 容器），不再用实心主色（浅色下刺眼） */
+                background: isSelected
+                  ? 'color-mix(in srgb, var(--accent) 24%, transparent)'
+                  : intensity > 0
+                  ? `color-mix(in srgb, var(--accent) ${intensity}%, transparent)`
                   : 'var(--track)',
-                border: i === calendar.length - 1 ? '1px solid var(--accent)' : '1px solid transparent',
+                color: isFuture ? 'var(--text-3)' : 'var(--text-1)',
+                opacity: isFuture ? 0.45 : 1,
+                border: isSelected
+                  ? '1.5px solid var(--accent)'
+                  : isToday
+                  ? '1.5px solid color-mix(in srgb, var(--accent) 55%, transparent)'
+                  : '1.5px solid transparent',
               }}
-            />
+            >
+              <span className="text-[11px] font-semibold leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>{day}</span>
+              {count > 0 && (
+                <span
+                  className="text-[8px] leading-none mt-0.5 font-medium"
+                  style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}
+                >
+                  {count > 99 ? '99+' : count}
+                </span>
+              )}
+            </button>
           )
         })}
       </div>
-      <div className="flex items-center gap-2 mt-2 justify-end">
+
+      {/* 选中日期详情 */}
+      <div
+        className="mt-3 rounded-xl px-3.5 py-2.5 flex items-center justify-between"
+        style={{ background: 'var(--track)' }}
+      >
+        <span className="text-xs font-medium" style={{ color: 'var(--text-2)' }}>{selLabel}</span>
+        {selCount > 0 ? (
+          <span className="text-xs font-bold" style={{ color: 'var(--accent)', fontVariantNumeric: 'tabular-nums' }}>
+            答题 {selCount} 题
+          </span>
+        ) : (
+          <span className="text-xs" style={{ color: 'var(--text-3)' }}>当天没有答题记录</span>
+        )}
+      </div>
+
+      {/* 色阶图例 */}
+      <div className="flex items-center gap-2 mt-2.5 justify-end">
         <span className="text-[9px]" style={{ color: 'var(--text-3)' }}>少</span>
-        {[0.1, 0.25, 0.4, 0.6, 0.8].map(v => (
-          <div key={v} className="w-3 h-3 rounded-sm" style={{ background: `rgba(95, 141, 140, ${v})` }} />
+        {[8, 17, 25, 34, 42].map(v => (
+          <div key={v} className="w-3 h-3 rounded-full" style={{ background: `color-mix(in srgb, var(--accent) ${v}%, transparent)` }} />
         ))}
         <span className="text-[9px]" style={{ color: 'var(--text-3)' }}>多</span>
       </div>
@@ -89,11 +223,13 @@ function KnowledgeBar({ topic, accuracy }: { topic: string; accuracy: number }) 
   )
 }
 
-export function LearningScreen({ onStartPractice }: LearningScreenProps) {
+export function LearningScreen({ onStartPractice, onBack }: LearningScreenProps) {
   const [period, setPeriod] = useState<'week' | 'month'>('week')
   const [report, setReport] = useState<UserStatsReport | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  /* 整屏进场动效：切换「本周 / 本月」重新拉数据时，分区再错峰播一次 */
+  const staggerRef = useStagger<HTMLDivElement>(period)
 
   useEffect(() => {
     let cancelled = false
@@ -129,9 +265,21 @@ export function LearningScreen({ onStartPractice }: LearningScreenProps) {
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 110 }}>
-        {/* 标题 */}
+      <div className="ui-stagger" ref={staggerRef} style={{ paddingBottom: 110 }}>
+        {/* 标题（带返回上一级按钮） */}
         <div className="px-5 pt-14 pb-4">
+          <div className="mb-2 -ml-2 flex items-center">
+            {onBack && (
+              <button
+                onClick={onBack}
+                aria-label="返回上一级"
+                className="tap flex h-9 w-9 items-center justify-center rounded-full transition-colors"
+                style={{ color: 'var(--text-2)', background: 'var(--card)' }}
+              >
+                <ChevronLeftIcon size={18} />
+              </button>
+            )}
+          </div>
           <h1 className="text-2xl font-bold mb-1" style={{ color: 'var(--text-1)', letterSpacing: '-0.015em' }}>学习报告</h1>
           <p className="text-sm" style={{ color: 'var(--text-3)' }}>
             {hasData ? `你已连续学习 ${report?.streak_days ?? 0} 天，保持！` : '开始答题后，这里会生成你的专属学习报告'}
@@ -183,7 +331,7 @@ export function LearningScreen({ onStartPractice }: LearningScreenProps) {
           ))}
         </div>
 
-        {/* 学习日历（近 35 天真实答题量） */}
+        {/* 学习日历（近 140 天真实答题量，真实月历可翻页/选日期） */}
         <div className="px-4 mb-5">
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
@@ -195,7 +343,7 @@ export function LearningScreen({ onStartPractice }: LearningScreenProps) {
                 <CalendarIcon size={12} /> 连续 {report?.streak_days ?? 0} 天
               </span>
             </div>
-            <CalendarHeatmap calendar={report?.calendar ?? []} />
+            <StudyCalendar calendar={report?.calendar ?? []} />
           </div>
         </div>
 

@@ -17,9 +17,10 @@ export type Screen =
   | 'search'
   | 'notifications'
   | 'achievements'
+  | 'theme-store'
   | 'settings'
 
-export type Tab = 'home' | 'questions' | 'materials' | 'wrong' | 'learning' | 'profile'
+export type Tab = 'home' | 'questions' | 'materials' | 'wrong' | 'learning' | 'music' | 'profile'
 
 export type NDTMethod = 'UT' | 'RT' | 'MT' | 'PT' | 'ET' | 'VT' | '综合'
 

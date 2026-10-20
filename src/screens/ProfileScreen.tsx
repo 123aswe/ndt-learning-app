@@ -7,9 +7,10 @@ import { APP_VERSION } from '../data/appVersion'
 import { ApiError } from '../api/client'
 import {
   PencilIcon, ChevronRightIcon, BookIcon, WrongIcon, ChartIcon,
-  AwardIcon, GearIcon, CameraIcon, XIcon, PlayIcon,
+  AwardIcon, GearIcon, CameraIcon, XIcon, PlayIcon, PaletteIcon,
 } from '../components/icons'
 import { AchievementIcon } from '../components/AchievementIcon'
+import { getSkin, subscribeSkin } from '../themeStore'
 import type { Screen } from '../types'
 
 /* ============================================================
@@ -29,6 +30,8 @@ import type { Screen } from '../types'
 
 interface ProfileScreenProps {
   onNavigate: (screen: Screen) => void
+  /** 编辑资料面板打开 / 关闭时通知外层隐藏 / 恢复底部导航（v1.68） */
+  onOverlayChange?: (overlay: boolean) => void
 }
 
 /** 昵称长度限制（后端最大 32，界面收得更紧一些保证展示不折行） */
@@ -41,10 +44,13 @@ const menuItems = (subs: {
   totalMinutes: number
   achEarned: number
   achTotal: number
+  /** 当前主题名（没挑主题时显示「默认外观」） */
+  skinName: string
 }) => [
   { icon: <BookIcon size={18} />, label: '我的收藏', sub: '收藏的视频', screen: 'favorites' as Screen },
   { icon: <ChartIcon size={18} />, label: '学习记录', sub: `累计 ${subs.totalMinutes} 分钟`, screen: 'learning' as Screen },
   { icon: <AwardIcon size={18} />, label: '成就勋章', sub: `${subs.achEarned} / ${subs.achTotal} 已获得`, screen: 'achievements' as Screen },
+  { icon: <PaletteIcon size={18} />, label: '主题商店', sub: `${subs.skinName} · 背景与配色`, screen: 'theme-store' as Screen },
   { icon: <GearIcon size={18} />, label: '设置', sub: '账号、外观、通知', screen: 'settings' as Screen },
 ]
 
@@ -55,7 +61,7 @@ const quickEntries = (wrongPending: number) => [
   { icon: <PlayIcon size={18} />, label: '观看历史', sub: '看过的视频都在这里', screen: 'watch-history' as Screen },
 ]
 
-export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
+export function ProfileScreen({ onNavigate, onOverlayChange }: ProfileScreenProps) {
   const { profile, canEdit, update, error: loadError } = useProfile()
   const { stats } = useHomeData()
 
@@ -74,6 +80,10 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
   const account = profile?.account || ''
   const org = profile?.org || ''
   const method = profile?.method || ''
+
+  /* 主题商店选中的皮肤名（订阅变化：换主题 / 恢复默认后本页副标题跟着更新） */
+  const [skinName, setSkinName] = useState(() => getSkin()?.name || '默认外观')
+  useEffect(() => subscribeSkin(() => setSkinName(getSkin()?.name || '默认外观')), [])
 
   /* ── 编辑面板状态 ── */
   const [editorOpen, setEditorOpen] = useState(false)
@@ -112,6 +122,13 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
     setEditorOpen(false)
     setEditorError('')
   }
+
+  /* v1.68：编辑头像 / 昵称面板打开时隐藏 App 底部导航（面板是底部抽屉，导航会压在上面）；
+     关闭时恢复。卸载兜底恢复，避免留在「隐藏」状态回不到别的 Tab。 */
+  useEffect(() => {
+    onOverlayChange?.(editorOpen)
+    return () => onOverlayChange?.(false)
+  }, [editorOpen, onOverlayChange])
 
   /* 选本地图片 → 居中裁剪成正方形 → 压到 256×256 → 转 data URL */
   const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -181,7 +198,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 110 }}>
+      <div className="ui-stagger" style={{ paddingBottom: 110 }}>
         {/* 头像区 */}
         <div className="px-5 pt-14 pb-5">
           <div className="flex items-start justify-between">
@@ -309,6 +326,7 @@ export function ProfileScreen({ onNavigate }: ProfileScreenProps) {
             totalMinutes,
             achEarned: stats?.ach_earned ?? earnedAchs.length,
             achTotal,
+            skinName,
           }).map(item => (
             <button
               key={item.label}

@@ -1,0 +1,7 @@
+/* 页面样式：web-view 铺满；兜底页复用 app.wxss 的 .fb-* 类 */
+
+web-view {
+  display: block;
+  width: 100%;
+  height: 100vh;
+}

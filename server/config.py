@@ -21,14 +21,24 @@ CONFIG_PATH = BASE_DIR / "config.json"
 # ── 默认配置（不含任何密钥） ──────────────────────────────────────
 DEFAULTS: dict = {
     "server": {
-        "host": "127.0.0.1",
+        # host 固定 0.0.0.0：本机/局域网/公网隧道共用一个监听，
+        # 「谁能访问」由 lan_access.enabled 控制（main.py 的 lan_guard 中间件）——
+        # 关（默认）= 只有本机能访问，行为与旧版只监听 127.0.0.1 完全一致
+        "host": "0.0.0.0",
         "port": 8000,
+    },
+    "lan_access": {
+        # 局域网访问开关：false 时非本机请求一律 403；管理后台「网络访问」卡片可开关，
+        # 开关状态写回本文件（modules/network.py）
+        "enabled": False,
     },
     "database": {
         "path": "data/app.db",
     },
     "security": {
-        "token_ttl_hours": 24,
+        # 令牌有效期（小时）：360 = 15 天。有效期内每访问一次自动续期（见 deps._renew_session），
+        # 所以实际效果是「15 天不登录才需要重新登录」；改成 24 就是「一天不登录就得重登」
+        "token_ttl_hours": 360,
         "pbkdf2_iterations": 200_000,
     },
     "captcha": {
@@ -49,6 +59,23 @@ DEFAULTS: dict = {
         "resend_interval_seconds": 60,  # 同一手机号两次发送的最小间隔（秒）
         "daily_limit_per_phone": 10,    # 同一手机号每日最多发送次数
         "max_verify_attempts": 5,       # 同一验证码最多允许校验错误次数
+    },
+    "realtime": {
+        # 实时通道（SSE）：通知 / 评论回复 / 版本更新 写库后立刻推给在线考生，
+        # 不再等前端每 30 秒轮询一次。关掉它前端会自动退回轮询，功能不受影响。
+        "enabled": True,
+        "heartbeat_seconds": 15,  # 空闲心跳间隔，防止代理掐掉长连接
+    },
+    "ai": {
+        # AI 智能助手（modules/ai.py）：题目 AI 解析 + 视频 AI 概括，走智谱开放平台
+        # （BigModel / GLM，接口是 OpenAI 兼容的 /chat/completions）。
+        # api_key 为空时 AI 相关按钮会提示「未配置」，其余功能不受影响。
+        "api_key": "",                       # 智谱 API Key（形如 xxxxxxxx.yyyyyyyy，密钥只放这里，不要进前端）
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "chat_model": "glm-4-flash",         # 纯文本模型：题目解析、无画面的视频概括
+        "vision_model": "glm-4v-flash",      # 视觉模型：视频抽帧后看图概括
+        "timeout_seconds": 120,              # 单次生成超时（秒）
+        "video_frames": 6,                   # 视频概括抽取的关键帧数量（1~8，越多越慢越贵）
     },
     "frontend_origins": [
         "http://localhost:8443",
@@ -102,3 +129,8 @@ def sms_ready() -> bool:
 def sms_mode() -> str:
     """当前短信模式：tencent（真发） / local（本地调试）。"""
     return "tencent" if sms_ready() else "local"
+
+
+def ai_ready() -> bool:
+    """AI 智能助手是否已配置（智谱 API Key 非空）。未配置时相关接口返回友好提示。"""
+    return bool(str(config["ai"].get("api_key", "")).strip())

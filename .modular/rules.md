@@ -18,11 +18,12 @@
 - 前端开发时由 Vite 把 `/api` 代理到 `http://127.0.0.1:8000`
 - 可视化管理后台由 Python 服务直接托管（`server/static/`，纯静态无需构建）
 
-## 2. 常用命令（⚠️ 本机以 npm 为准）
+## 2. 常用命令（⚠️ 依赖用 pnpm · hoisted 布局；脚本命令 npm/pnpm 均可）
 
 **前端**
 ```bash
-npm install       # 装依赖
+pnpm install      # 装依赖（按 pnpm-lock.yaml，hoisted 扁平复制布局）
+pnpm add <pkg>    # 加依赖
 npm run dev       # 开发服务器（端口 8443）
 npm run build     # 生产构建 —— 交付前必须通过
 npx tsc --noEmit  # 类型检查（build 不做完整类型校验，改完 TS 建议跑一次）
@@ -44,8 +45,11 @@ copy config.example.json config.json     # 填腾讯云凭证（不填则走本�
 
 - 管理后台：http://127.0.0.1:8000/admin/ ；接口文档：http://127.0.0.1:8000/docs
 - Windows 双击根目录 `启动App.bat` 启动前端
-- 🚫 **不要用 `pnpm build`**：`pnpm-lock.yaml` 是 pnpm 生成的，但 `node_modules` 是 npm 装的，两者不同步 → 必失败
-- 🚫 **不要用 `npx pnpm@9.15.11`**：npm registry 上无此版本，报 ETARGET
+- ⚠️ **依赖管理以 pnpm 为准**（`pnpm-lock.yaml` 是唯一锁文件）。v1.86 起 `nodeLinker: hoisted`
+  固定在**根目录 `pnpm-workspace.yaml`** —— ⚠️ pnpm v10+ 已不从 `.npmrc` 读 `node-linker`，
+  只写 `.npmrc` 会静默回退到 isolated symlink 布局，而本机会删 symlink → `node_modules` 残破
+  （v1.86 就踩过：`pnpm add` 之后 react / vite 全部消失，只能删掉 `node_modules` 重装）。
+  若发现根 `node_modules` 缺包但 `.pnpm` 里有：删 `node_modules` → `pnpm install` 重建
 - ⚠️ pip 装依赖若镜像失败，加 `-i https://pypi.org/simple` 走官方源
 
 ## 3. 修改流程（两阶段，顺序不可颠倒）

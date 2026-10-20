@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { libraryApi, type MaterialItem } from '../api/client'
 import { PlayIcon, EyeIcon, HeartIcon } from './icons'
 import { formatCount, formatDuration, formatSize } from '../data/format'
@@ -13,6 +13,7 @@ import { formatCount, formatDuration, formatSize } from '../data/format'
    修改注意：
      - 图标只用 icons.tsx 的线性图标，颜色只用 var(--token)（深色模式）
      - 点卡片由父级 onOpen 决定去详情页还是别的行为
+     - 封面/首帧是「进视口才加载」的（见组件内 inView），别改成无条件挂载
    ============================================================ */
 
 /** 逐张错落的高度比例，做出双列瀑布流的观感 */
@@ -33,8 +34,38 @@ export function VideoCard({ item, index = 0, onOpen, showFavorited = false }: Vi
   const [coverFailed, setCoverFailed] = useState(false)
   const useCover = item.has_cover && !coverFailed
 
+  /**
+   * 封面按需加载：卡片滚进视口后才真正去拉首帧 / 封面。
+   * 一个视频列表页往往几十张卡，全部挂 <video preload="metadata"> 会同时发几十个请求
+   * （拉首帧 + 读时长），手机上首屏又慢又费流量。提前 300px 预载，滚动时不出现空窗。
+   * 一旦加载就不再撤销（inView 只置 true），往回滚不会重新拉一遍。
+   */
+  const [inView, setInView] = useState(false)
+  const cardRef = useRef<HTMLButtonElement | null>(null)
+
+  useEffect(() => {
+    const el = cardRef.current
+    if (inView || !el) return
+    // 没有 IntersectionObserver 的环境（老浏览器 / 测试）：直接当已进入视口，功能不受影响
+    if (typeof IntersectionObserver === 'undefined') {
+      setInView(true)
+      return
+    }
+    const io = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          setInView(true)
+          io.disconnect()
+        }
+      },
+      { rootMargin: '300px 0px' },
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [inView])
+
   return (
-    <button onClick={onOpen} className="card overflow-hidden flex flex-col card-tap text-left">
+    <button ref={cardRef} onClick={onOpen} className="card overflow-hidden flex flex-col card-tap text-left">
       <div
         className="w-full relative overflow-hidden"
         style={{ aspectRatio: VIDEO_ASPECTS[index % VIDEO_ASPECTS.length], background: 'var(--track)' }}
@@ -47,24 +78,26 @@ export function VideoCard({ item, index = 0, onOpen, showFavorited = false }: Vi
           <span style={{ color: 'var(--accent)', opacity: 0.30 }}><PlayIcon size={40} /></span>
         </div>
 
-        {/* 自动首帧：既当封面兜底，也用来读真实时长 */}
-        <video
-          src={`${libraryApi.fileUrl(item.id)}#t=0.1`}
-          muted
-          playsInline
-          preload="metadata"
-          tabIndex={-1}
-          aria-hidden="true"
-          onLoadedData={e => {
-            setFramed(true)
-            setDuration(formatDuration(e.currentTarget.duration))
-          }}
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ opacity: !useCover && framed ? 1 : 0, transition: 'opacity 0.3s ease' }}
-        />
+        {/* 自动首帧：既当封面兜底，也用来读真实时长（进视口后才挂载，见上方 inView） */}
+        {inView && (
+          <video
+            src={`${libraryApi.fileUrl(item.id)}#t=0.1`}
+            muted
+            playsInline
+            preload="metadata"
+            tabIndex={-1}
+            aria-hidden="true"
+            onLoadedData={e => {
+              setFramed(true)
+              setDuration(formatDuration(e.currentTarget.duration))
+            }}
+            className="absolute inset-0 w-full h-full object-cover"
+            style={{ opacity: !useCover && framed ? 1 : 0, transition: 'opacity 0.3s ease' }}
+          />
+        )}
 
-        {/* 管理员指定的自定义封面 */}
-        {item.has_cover && (
+        {/* 管理员指定的自定义封面（同样进视口才加载） */}
+        {inView && item.has_cover && (
           <img
             src={libraryApi.coverUrl(item.id)}
             alt=""

@@ -1,0 +1,3 @@
+# pnpm v10+ 的 node-linker 等配置已从 .npmrc 迁移到这里。
+# 本机 Windows 会静默删除 symlink（isolated 布局会坏），必须用 hoisted 扁平复制布局。
+nodeLinker: hoisted

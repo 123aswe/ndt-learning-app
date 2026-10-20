@@ -29,6 +29,8 @@ from pydantic import BaseModel, Field
 
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_admin
+from modules import realtime
+from modules import notifications
 from profile_defaults import random_avatar, random_nickname
 from security import hash_password
 
@@ -120,12 +122,27 @@ def list_users(
             f"SELECT * FROM user_accounts{clause} ORDER BY id DESC LIMIT ? OFFSET ?",
             params + [page_size, (page - 1) * page_size],
         ).fetchall()
+        # 在线状态：该考生当前还有未过期的登录会话（单端登录下即「正有一台设备在线」）
+        active_ids = {
+            r["subject_id"]
+            for r in conn.execute(
+                "SELECT DISTINCT subject_id FROM sessions "
+                "WHERE subject_type = 'user' AND expires_at > ?",
+                (now_iso(),),
+            ).fetchall()
+        }
+
+    items = []
+    for r in rows:
+        d = _public(dict(r))
+        d["online"] = d["id"] in active_ids
+        items.append(d)
 
     return {
         "total": total,
         "page": page,
         "page_size": page_size,
-        "items": [_public(dict(r)) for r in rows],
+        "items": items,
     }
 
 
@@ -166,6 +183,8 @@ def create_user(body: UserCreateBody, admin: dict = Depends(get_current_admin)):
                 now_iso(),
             ),
         )
+        # 新考生自动收到「欢迎加入」系统通知（与注册审核通过同一条文案，见 modules/notifications.py）
+        notifications.send_welcome_notice(conn, user_id=int(cursor.lastrowid))
         return _public(_get_or_404(conn, cursor.lastrowid))
 
 
@@ -220,11 +239,21 @@ def update_user(user_id: int, body: UserUpdateBody, admin: dict = Depends(get_cu
         params.append(user_id)
         conn.execute(f"UPDATE user_accounts SET {', '.join(fields)} WHERE id = ?", params)
 
-        # 改了密码 / 被禁用 → 踢掉已有会话
-        if body.password is not None or body.status == 0:
+        # 改了密码 / 被禁用 → 踢掉已有会话，并立刻把在线端赶回登录页（不用等下次请求 401）
+        kick_reason = ""
+        if body.password is not None:
+            kick_reason = (
+                "管理员重置了你的密码，请用新密码重新登录"
+                if body.password
+                else "登录密码已被管理员清除，请联系管理员"
+            )
+        if body.status == 0:
+            kick_reason = "账号已被管理员禁用，请联系管理员"
+        if kick_reason:
             conn.execute(
                 "DELETE FROM sessions WHERE subject_type = 'user' AND subject_id = ?", (user_id,)
             )
+            realtime.kick_session(user_id, kick_reason)
 
         return _public(_get_or_404(conn, user_id))
 
@@ -239,4 +268,6 @@ def delete_user(user_id: int, admin: dict = Depends(get_current_admin)):
         conn.execute(
             "DELETE FROM sessions WHERE subject_type = 'user' AND subject_id = ?", (user_id,)
         )
+    # 事务提交后再推：账号确实没了，才把在线端赶回登录页
+    realtime.kick_session(user_id, "账号已被管理员删除")
     return {"ok": True, "message": f"已删除考生 {target['account']}"}

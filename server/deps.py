@@ -3,6 +3,7 @@
 
 职责：
   1. create_session / revoke_session / resolve_session：令牌的增删查
+     （令牌有效期 = config.security.token_ttl_hours，默认 15 天；有效期内每次请求自动续期）
   2. get_current_admin：要求管理员登录的接口挂这个依赖
   3. get_current_user：要求考生登录的接口挂这个依赖
   4. require_super_admin：仅超级管理员可用的接口挂这个依赖
@@ -27,6 +28,10 @@ USER = "user"
 
 # ── 会话令牌 ────────────────────────────────────────────────
 
+# 续期节流间隔：剩余有效期少于「总时长 − 24 小时」时才写库续期 → 每个令牌每天最多写一次
+_RENEW_INTERVAL = timedelta(hours=24)
+
+
 def create_session(subject_type: str, subject_id: int) -> dict:
     """为某个主体（管理员 / 考生）签发令牌。"""
     ttl_hours = int(config["security"]["token_ttl_hours"])
@@ -45,8 +50,30 @@ def revoke_session(token: str) -> None:
         conn.execute("DELETE FROM sessions WHERE token = ?", (token,))
 
 
+def _renew_session(session: dict) -> None:
+    """把快过期的令牌续到「现在 + TTL」——按天节流；解析失败直接跳过，不影响正常鉴权。"""
+    ttl_hours = int(config["security"]["token_ttl_hours"])
+    try:
+        expires_at = datetime.strptime(session["expires_at"], "%Y-%m-%d %H:%M:%S")
+    except (KeyError, ValueError, TypeError):
+        return
+    now = datetime.now()
+    ttl = timedelta(hours=ttl_hours)
+    if expires_at - now > ttl - _RENEW_INTERVAL:
+        return  # 离过期还早，这次不写库
+    new_expires = (now + ttl).strftime("%Y-%m-%d %H:%M:%S")
+    with get_conn() as conn:
+        conn.execute("UPDATE sessions SET expires_at = ? WHERE token = ?", (new_expires, session["token"]))
+    session["expires_at"] = new_expires
+
+
 def resolve_session(token: str) -> dict | None:
-    """令牌 → {subject_type, subject_id}；无效或过期返回 None。"""
+    """令牌 → {subject_type, subject_id}；无效或过期返回 None。
+
+    滑动有效期：只要在有效期内发过任意一次请求（App 每次打开都会请求接口），
+    就把有效期续到「现在 + token_ttl_hours」——所以是「15 天不登录才要重新登录」，
+    而不是登录满 15 天后被强制踢出去。续期按天节流，不会每个请求都写库。
+    """
     if not token:
         return None
     with get_conn() as conn:
@@ -56,6 +83,7 @@ def resolve_session(token: str) -> dict | None:
         if data:
             revoke_session(token)
         return None
+    _renew_session(data)
     return data
 
 

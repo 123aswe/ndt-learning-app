@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { useHomeData } from '../hooks/useHomeData'
 import { ShuffleIcon, XIcon } from './icons'
+import { QTYPE_LABELS, QTYPE_ORDER } from '../data/qtypes'
 
 /* ============================================================
    随机刷题选择面板（底部弹层）
@@ -16,12 +17,10 @@ interface RandomDrillSheetProps {
   onStart: (opts: { category: string; qtype: string }) => void
 }
 
-/** 题型代码 → 展示名（与后端 bank.py 的 QTYPE_NAMES 同一套代码，改动要同步） */
+/** 题型代码 → 展示名：统一从 src/data/qtypes.ts 取（与后端 bank.py 的 QTYPE_NAMES 同一套代码） */
 const QTYPE_OPTIONS: Array<{ value: string; label: string }> = [
   { value: '', label: '全部' },
-  { value: 'judge', label: '判断题' },
-  { value: 'single', label: '选择题' },
-  { value: 'calc', label: '计算题' },
+  ...QTYPE_ORDER.map(code => ({ value: code as string, label: QTYPE_LABELS[code] })),
 ]
 
 export function RandomDrillSheet({ onClose, onStart }: RandomDrillSheetProps) {

@@ -3,14 +3,14 @@ import { Avatar } from '../components/Avatar'
 import { PasswordResetSheet } from '../components/PasswordResetSheet'
 import { useProfile } from '../hooks/useProfile'
 import {
-  ApiError, appApi, authApi, clearSession, getIdentity, patchSavedProfile, securityApi,
+  ApiError, appApi, authApi, clearSession, getIdentity, officialSiteUrl, patchSavedProfile, securityApi,
 } from '../api/client'
 import { APP_VERSION, hasUpdate } from '../data/appVersion'
 import { NOTIFY_STUDY_KEY, NOTIFY_REVIEW_KEY } from '../data/notifyPrefs'
 import { getThemeMode, setThemeMode, type ThemeMode } from '../theme'
 import {
   ChevronLeftIcon, ChevronRightIcon, UserIcon, BellIcon, TrashIcon, LogoutIcon, CheckIcon,
-  RefreshIcon, XIcon,
+  GlobeIcon, RefreshIcon, XIcon,
 } from '../components/icons'
 
 /* ============================================================
@@ -20,7 +20,8 @@ import {
      忘记原密码 / 无法登录时提示联系管理员在后台重置
    - 外观：三种模式都立即生效并持久化（ndt_theme），样式在 src/index.css 的 [data-theme='dark']
    - 通知：本地开关，暂存 localStorage（推送后端尚未接入）
-   - 清除缓存：清掉非登录态的本地缓存，不碰 ndt_token / ndt_identity / ndt_profile
+   - 清除缓存：清掉非登录态的本地缓存（含「上次停留的页面」），
+     不碰 ndt_token / ndt_identity / ndt_profile / ndt_onboarded（引导页标记）
    - 检查更新：比对 src/data/appVersion.ts 的 APP_VERSION 与 GET /api/app/version
    - 退出登录：调 /auth/logout（失败也照常清本地），回到登录页
    修改注意：
@@ -29,8 +30,8 @@ import {
      - 颜色一律用 var(--token)，写死 hex 会让深色模式变脏
    ============================================================ */
 
-/** 登录态保留的键：清除缓存不会动它们 */
-const SESSION_KEYS = ['ndt_token', 'ndt_identity', 'ndt_profile', 'ndt_notify_study', 'ndt_notify_review']
+/** 清除缓存不动的键：登录态 + 本机偏好 + 「这台设备用过 App」标记（否则老用户会被送回引导页） */
+const SESSION_KEYS = ['ndt_token', 'ndt_identity', 'ndt_profile', 'ndt_notify_study', 'ndt_notify_review', 'ndt_onboarded', 'ndt_lib_order']
 
 const PASSWORD_MIN = 6
 const ACCOUNT_HINT = '账号为 4-20 位字母 / 数字 / 下划线'
@@ -443,7 +444,7 @@ export function SettingsScreen({ onBack, onLogout }: SettingsScreenProps) {
   ]
 
   return (
-    <div className="scroll-area bg-page">
+    <div className="scroll-area bg-page ui-stagger">
       {/* 顶栏 */}
       <div className="px-5 pt-14 pb-4 flex items-center gap-3">
         <button
@@ -546,12 +547,21 @@ export function SettingsScreen({ onBack, onLogout }: SettingsScreenProps) {
         <p className="text-xs font-medium px-1 mb-2" style={{ color: 'var(--text-3)' }}>通用</p>
         <div className="card overflow-hidden">
           <SettingsRow
-            icon={<TrashIcon size={18} />}
-            label="清除缓存"
-            sub={`约占 ${cacheInfo.kb} KB · ${cacheInfo.count} 项本地数据`}
-            onClick={() => setClearOpen(true)}
+            icon={<GlobeIcon size={18} />}
+            label="官网"
+            sub="在浏览器中打开官方网站"
+            onClick={() => window.open(officialSiteUrl(), '_blank')}
             right={<ChevronRightIcon size={14} color="var(--text-3)" />}
           />
+          <div style={{ borderTop: '1px solid var(--line)' }}>
+            <SettingsRow
+              icon={<TrashIcon size={18} />}
+              label="清除缓存"
+              sub={`约占 ${cacheInfo.kb} KB · ${cacheInfo.count} 项本地数据`}
+              onClick={() => setClearOpen(true)}
+              right={<ChevronRightIcon size={14} color="var(--text-3)" />}
+            />
+          </div>
           <div style={{ borderTop: '1px solid var(--line)' }}>
             <SettingsRow
               icon={<RefreshIcon size={18} />}

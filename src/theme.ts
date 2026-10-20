@@ -32,11 +32,18 @@ export function resolveTheme(mode: ThemeMode = getThemeMode()): ResolvedTheme {
   return mql()?.matches ? 'dark' : 'light'
 }
 
-/** 把实际明暗写到 html[data-theme]，并同步 meta theme-color */
+/** 把实际明暗写到 html[data-theme]，并同步 meta theme-color
+ *
+ *  「主题商店」的皮肤优先：皮肤按自己的字色指定明暗基调（写在 html[data-skin]，
+ *  见 src/themeStore.ts）。皮肤生效时 data-theme 一律跟随皮肤，否则系统主题一变
+ *  就会把皮肤的浅色字/深色字基调覆盖掉、文字看不清。
+ */
 function paint(resolved: ResolvedTheme) {
-  document.documentElement.dataset.theme = resolved
+  const skin = document.documentElement.dataset.skin
+  const final: ResolvedTheme = skin === 'dark' || skin === 'light' ? skin : resolved
+  document.documentElement.dataset.theme = final
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', resolved === 'dark' ? '#14171A' : '#F8F3E8')
+  if (meta) meta.setAttribute('content', final === 'dark' ? '#14171A' : '#F8F3E8')
 }
 
 /** 设置模式并持久化；返回实际生效的明暗 */

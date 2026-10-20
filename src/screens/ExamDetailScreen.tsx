@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react'
 import { examApi, practiceApi, type SessionDetail } from '../api/client'
 import { ChevronLeftIcon, CheckIcon, XIcon } from '../components/icons'
+import { AiExplainToggle } from '../components/AiExplainToggle'
+import { RichText } from '../components/RichText'
+import { stripRichText } from '../data/richText'
+import { QTYPE_LABELS } from '../data/qtypes'
 
 /* ============================================================
    试卷回看页（苹果式浅色）—— 考试与练习共用
@@ -26,10 +30,7 @@ function formatUsed(s: number) {
 }
 
 function qtypeLabel(q: SessionDetail['items'][number]): string {
-  if (q.qtype === 'judge') return '判断题'
-  if (q.qtype === 'calc') return '计算题'
-  if (q.qtype === 'short') return '简答题'
-  return '选择题'
+  return QTYPE_LABELS[q.qtype] || '选择题'
 }
 
 export function ExamDetailScreen({ examId, kind = 'exam', onBack }: ExamDetailScreenProps) {
@@ -52,7 +53,7 @@ export function ExamDetailScreen({ examId, kind = 'exam', onBack }: ExamDetailSc
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 60 }}>
+      <div className="ui-stagger" style={{ paddingBottom: 60 }}>
         {/* 顶栏 */}
         <div className="px-5 pt-14 pb-4 flex items-center gap-3">
           <button
@@ -161,20 +162,24 @@ export function ExamDetailScreen({ examId, kind = 'exam', onBack }: ExamDetailSc
 
                     {/* 题干 */}
                     <p className="text-sm leading-relaxed font-medium mb-3" style={{ color: 'var(--text-1)' }}>
-                      {q.content}
+                      <RichText text={q.content} />
                     </p>
 
                     {/* 选项：正确=绿，我选错=红，其余=灰 */}
                     {isShort ? (
                       <div className="rounded-xl px-4 py-3 mb-3" style={{ background: 'var(--ok-weak)', border: '1px solid var(--ok-border)' }}>
                         <p className="text-xs font-semibold mb-1" style={{ color: 'var(--ok)' }}>参考答案</p>
-                        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-1)' }}>{q.answer}</p>
+                        <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-1)' }}><RichText text={q.answer} /></p>
                       </div>
                     ) : (
                       <div className="space-y-2 mb-3">
                         {q.options.map(opt => {
-                          const isCorrect = opt.key === q.answer
-                          const isMyWrong = answered && !q.is_correct && opt.key === q.my_answer
+                          // 多选题：正确答案是多个字母（'ACD'），逐个选项判断是否属于正确答案
+                          const correctKeys = q.answer || ''
+                          const myKeys = q.my_answer || ''
+                          const isCorrect = correctKeys.includes(opt.key)
+                          const isMyWrong = answered && !q.is_correct
+                            && myKeys.includes(opt.key) && !correctKeys.includes(opt.key)
                           return (
                             <div
                               key={opt.key}
@@ -197,7 +202,7 @@ export function ExamDetailScreen({ examId, kind = 'exam', onBack }: ExamDetailSc
                                 className="text-sm leading-relaxed flex-1"
                                 style={{ color: isCorrect ? 'var(--ok)' : isMyWrong ? 'var(--err)' : 'var(--text-2)' }}
                               >
-                                {opt.text}
+                                <RichText text={opt.text} />
                               </p>
                             </div>
                           )
@@ -208,7 +213,7 @@ export function ExamDetailScreen({ examId, kind = 'exam', onBack }: ExamDetailSc
                     {/* 答案标注 */}
                     <div className="flex items-center gap-4 pt-2 flex-wrap" style={{ borderTop: '1px solid var(--line)' }}>
                       <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
-                        正确答案：<span className="font-bold" style={{ color: 'var(--ok)' }}>{q.answer}</span>
+                        正确答案：<span className="font-bold" style={{ color: 'var(--ok)' }}>{stripRichText(q.answer)}</span>
                       </span>
                       <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>
                         我的答案：
@@ -220,6 +225,9 @@ export function ExamDetailScreen({ examId, kind = 'exam', onBack }: ExamDetailSc
                         <span className="text-[10px] ml-auto" style={{ color: 'var(--text-3)' }}>{q.topic}</span>
                       )}
                     </div>
+
+                    {/* AI 解析：点开才发请求（一屏多题，懒加载见 AiExplainToggle） */}
+                    <AiExplainToggle questionId={q.id} className="mt-3" />
                   </div>
                 )
               })}

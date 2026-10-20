@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { reportApi, type BankQuestion } from '../api/client'
+import { stripRichText } from '../data/richText'
 import { FlagIcon, XIcon } from './icons'
 
 /* ============================================================
@@ -73,7 +74,7 @@ export function QuestionReportSheet({ question, onClose }: QuestionReportSheetPr
             <>
               {/* 题干预览 */}
               <div className="rounded-xl px-3 py-3 mb-4" style={{ background: 'var(--surface-warm)', border: '1px solid var(--line)' }}>
-                <p className="text-xs leading-relaxed line-clamp-3" style={{ color: 'var(--text-2)' }}>{question.content}</p>
+                <p className="text-xs leading-relaxed line-clamp-3" style={{ color: 'var(--text-2)' }}>{stripRichText(question.content)}</p>
               </div>
 
               {/* 我认为的正确答案 */}
@@ -95,7 +96,7 @@ export function QuestionReportSheet({ question, onClose }: QuestionReportSheetPr
                           border: active ? '1px solid var(--accent-border)' : '1px solid var(--chip-border)',
                         }}
                       >
-                        {o.key}、{o.text.length > 8 ? `${o.text.slice(0, 8)}…` : o.text}
+                        {o.key}、{(() => { const t = stripRichText(o.text); return t.length > 8 ? `${t.slice(0, 8)}…` : t })()}
                       </button>
                     )
                   })}

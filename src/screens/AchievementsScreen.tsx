@@ -75,7 +75,7 @@ export function AchievementsScreen({ onBack }: AchievementsScreenProps) {
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 56 }}>
+      <div className="ui-stagger" style={{ paddingBottom: 56 }}>
         {/* 顶栏 */}
         <div className="px-5 pt-12 pb-3 flex items-center gap-3">
           <button

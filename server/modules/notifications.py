@@ -16,16 +16,23 @@
     GET    "/candidates"      候选接收考生（已注册且启用；支持关键词搜索，供「指定考生」选择器用）
     POST   ""                 发送通知
     GET    ""                 已发送记录（按批次聚合、分页）
-    DELETE "/{batch_id}"      删除后台发送记录（考生端保留，只是后台不再显示）
+    DELETE "/{batch_id}"      删除通知（后台记录隐藏 + 考生端对应通知一并移除，并实时通知在线考生）
 
-给其它模块用的写通知工具（密码重置等场景，别自己去 INSERT）：
-    new_batch_id() / create_batch() / push_notification() / send_system_notice()
+给其它模块用的写通知工具（密码重置、新用户欢迎等场景，别自己去 INSERT）：
+    new_batch_id() / create_batch() / push_notification() / send_system_notice() / send_welcome_notice()
 
 修改注意：
   - 通知类型只有两种：system（考生不可删除）/ notice（考生可删除），
     前端 src/data/notifications.ts 与后台 dashboard.html 的下拉要与此保持一致
   - 「一个账号只能发一次」= 同一次发送里账号自动去重（见 send_notification 的 _dedupe_accounts）
   - 考生端删除是软删（deleted = 1），批次里的 receiver_count 不会因此变化
+  - **管理员删除是「真删」语义**：批次 hidden = 1（后台不再显示）+ 该批次所有考生通知 deleted = 1，
+    并推 EVENT_NOTIFICATION_REMOVED 让在线考生立刻消失（见 delete_batch）；
+    考生端读列表时还会再校验一次批次是否 hidden（双保险，见 my_notifications）——
+    改版前留下的「后台删了、考生端还在」的残留由 database.py 的
+    _backfill_notify_hidden_batches() 一次性清理
+  - **实时推送接在 push_notification 里**（见 modules/realtime.py）：所有通知路径都汇到这一处，
+    所以「秒达」是全局生效的。新增发通知的业务时不要另写 INSERT，否则考生端收不到即时推送。
 """
 
 import secrets
@@ -35,6 +42,7 @@ from pydantic import BaseModel, Field
 
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_admin, get_current_user
+from modules import realtime
 
 router = APIRouter(prefix="/api/user/notifications", tags=["通知（考生端）"])
 admin_router = APIRouter(prefix="/api/admin/notifications", tags=["通知（管理端）"])
@@ -45,6 +53,22 @@ TYPE_LABEL = {"system": "系统通知", "notice": "普通通知"}
 
 TITLE_MAX = 40
 CONTENT_MAX = 1000
+
+# ── 新用户欢迎通知（自动推送，改文案就改这两行） ─────────────
+# 触发点：注册申请审核通过建号（modules/registrations.py）、管理员在后台手动新增考生（modules/user_accounts.py）
+WELCOME_TITLE = "欢迎加入 NDT-劳人"
+
+WELCOME_CONTENT = (
+    "欢迎加入 NDT-劳人！从今天起，这里陪你一起把 NDT 一级考下来。\n"
+    "\n"
+    "你可以从这里开始：\n"
+    "· 题库刷题 —— UT / RT / MT / PT 等方向 1740 道题，支持按方向、章节、题型练习\n"
+    "· 模拟考试 —— 按真实考试节奏抽题，到点自动交卷，成绩随时回看\n"
+    "· 资料库与视频课程 —— 标准规范、教材在线预览，课程视频随时看\n"
+    "· 错题本与成就 —— 答错的题自动收进错题本，坚持打卡还能解锁成就勋章\n"
+    "\n"
+    "先去「题库」做上 20 道题找找感觉吧，每天一点点，考试更有底。祝你早日拿证！"
+)
 
 # 考生端一次最多返回多少条（超出请让管理员清理旧通知）
 LIST_LIMIT = 200
@@ -113,12 +137,36 @@ def push_notification(
     sender: str,
     batch_id: str,
 ) -> None:
-    """给某个考生写一条通知。"""
-    conn.execute(
+    """给某个考生写一条通知，并立刻推给他的在线连接（这是通知「秒达」的唯一落点）。
+
+    所有发通知的路径（管理员群发 / 视频评论回复 / 密码重置结果）最终都走这里，
+    所以只要这一处接了实时推送，全站通知就都是即时的。
+
+    推送是「尽力而为」：考生不在线直接丢弃，他上线后前端会拉一次列表补齐；
+    通知 id 用 lastrowid 回填，前端据此判断是不是「没见过的新通知」。
+    """
+    created_at = now_iso()
+    cursor = conn.execute(
         """INSERT INTO notifications
            (batch_id, user_id, type, title, content, sender, read_at, deleted, created_at)
            VALUES (?,?,?,?,?,?,NULL,0,?)""",
-        (batch_id, user_id, type_, title, content, sender, now_iso()),
+        (batch_id, user_id, type_, title, content, sender, created_at),
+    )
+    # 字段结构与考生端 GET /api/user/notifications 的单条完全一致，
+    # 前端收到后不用再请求一次就能直接渲染（见 src/api/realtime.ts）
+    realtime.publish(
+        user_id,
+        realtime.EVENT_NOTIFICATION,
+        {
+            "id": cursor.lastrowid,
+            "type": type_,
+            "title": title,
+            "content": content,
+            "sender": sender or "系统",
+            "created_at": created_at,
+            "read": False,
+            "deletable": type_ != "system",
+        },
     )
 
 
@@ -153,6 +201,22 @@ def send_system_notice(conn, *, user_id: int, title: str, content: str, sender: 
     return batch_id
 
 
+def send_welcome_notice(conn, *, user_id: int) -> str:
+    """给新考生发「欢迎加入」系统通知（不可删除），并在后台留一条发送记录。
+
+    调用时机 = 账号刚创建出来（注册审核通过 / 后台手动新增考生）。
+    考生此刻通常不在线，实时推送会被静默丢弃，等他首次登录拉列表时就能看到。
+    返回 batch_id。
+    """
+    return send_system_notice(
+        conn,
+        user_id=user_id,
+        title=WELCOME_TITLE,
+        content=WELCOME_CONTENT,
+        sender="系统",
+    )
+
+
 # ── 考生端 ──────────────────────────────────────────────────
 
 def _my_item(row) -> dict:
@@ -173,11 +237,18 @@ def _my_item(row) -> dict:
 @router.get("", summary="我的通知（考生端通知中心）")
 def my_notifications(user: dict = Depends(get_current_user)):
     with get_conn() as conn:
+        # 除了看 deleted，还要求「所属批次没被管理员删掉」——
+        # 双保险：即使历史数据里漏标了 deleted（改版前的残留），考生端也不会再显示，
+        # 因为「管理员删掉了」就等于这条通知不该存在（见 delete_batch）。
         rows = conn.execute(
-            """SELECT id, type, title, content, sender, read_at, created_at
-               FROM notifications
-               WHERE user_id = ? AND deleted = 0
-               ORDER BY id DESC LIMIT ?""",
+            """SELECT n.id, n.type, n.title, n.content, n.sender, n.read_at, n.created_at
+               FROM notifications n
+               WHERE n.user_id = ? AND n.deleted = 0
+                 AND NOT EXISTS (
+                       SELECT 1 FROM notification_batches b
+                       WHERE b.id = n.batch_id AND b.hidden = 1
+                     )
+               ORDER BY n.id DESC LIMIT ?""",
             (user["id"], LIST_LIMIT),
         ).fetchall()
     items = [_my_item(r) for r in rows]
@@ -189,8 +260,14 @@ def my_notifications(user: dict = Depends(get_current_user)):
 
 
 def _get_my_notification(conn, user_id: int, notification_id: int) -> dict:
+    """取一条「考生自己还看得见」的通知；不存在 / 已删 / 所属批次被管理员删掉 → 404。"""
     row = conn.execute(
-        "SELECT * FROM notifications WHERE id = ? AND user_id = ? AND deleted = 0",
+        """SELECT n.* FROM notifications n
+           WHERE n.id = ? AND n.user_id = ? AND n.deleted = 0
+             AND NOT EXISTS (
+                   SELECT 1 FROM notification_batches b
+                   WHERE b.id = n.batch_id AND b.hidden = 1
+                 )""",
         (notification_id, user_id),
     ).fetchone()
     data = row_to_dict(row)
@@ -400,13 +477,41 @@ def list_batches(
     }
 
 
-@admin_router.delete("/{batch_id}", summary="删除后台发送记录（考生端保留）")
+@admin_router.delete("/{batch_id}", summary="删除通知（后台记录 + 考生端一起移除）")
 def delete_batch(batch_id: str, admin: dict = Depends(get_current_admin)):
+    """删除一次发送的通知：后台记录隐藏，考生端也一并消失（在线考生实时消失）。
+
+    早先的语义是「只隐藏后台记录、考生端保留」，现在改成两边一起删 ——
+    管理员在后台删掉一条通知，就是想让它别出现在考生那里。
+    """
     with get_conn() as conn:
         row = conn.execute(
             "SELECT * FROM notification_batches WHERE id = ?", (batch_id,)
         ).fetchone()
         if not row:
             raise HTTPException(status_code=404, detail="发送记录不存在")
+
+        # 先取出这一次发送给谁发了哪些条（要按考生分组推送「移除」事件）
+        rows = conn.execute(
+            """SELECT id, user_id FROM notifications
+               WHERE batch_id = ? AND deleted = 0""",
+            (batch_id,),
+        ).fetchall()
+        by_user: dict[int, list[int]] = {}
+        for r in rows:
+            by_user.setdefault(r["user_id"], []).append(r["id"])
+
         conn.execute("UPDATE notification_batches SET hidden = 1 WHERE id = ?", (batch_id,))
-    return {"ok": True, "message": "已删除该发送记录（考生已收到的通知不受影响）"}
+        conn.execute("UPDATE notifications SET deleted = 1 WHERE batch_id = ?", (batch_id,))
+
+    # 事务外推送：在线的考生立刻从列表里去掉这几条（不在线的下次拉列表也不会再拿到）
+    for user_id, ids in by_user.items():
+        realtime.publish(user_id, realtime.EVENT_NOTIFICATION_REMOVED, {"ids": ids})
+
+    removed = len(rows)
+    message = (
+        f"已删除该通知，考生端的 {removed} 条对应通知也已移除"
+        if removed
+        else "已删除该发送记录"
+    )
+    return {"ok": True, "removed": removed, "message": message}

@@ -17,6 +17,8 @@
 
 修改注意：
   - 「采纳」只改 questions.answer；如需改选项/题干，管理员用「题库管理」的编辑题目功能
+  - 「采纳」按题型校验建议答案：判断题 A/B、选择题/计算选择题必须在选项内、
+    多选题按字母集合归一（'C、A' → 'AC'）、计算题/简答题原样写回（不改大小写）
   - 编辑题目（question_sets.update_question）会自动关闭该题的 pending 工单
 """
 
@@ -27,6 +29,7 @@ from pydantic import BaseModel, Field
 
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_admin, get_current_user
+from modules.bank import QTYPE_NAMES, normalize_multi_answer
 
 admin_router = APIRouter(prefix="/api/admin/question-reports", tags=["题目纠错"])
 router = APIRouter(prefix="/api/user/question-reports", tags=["题目纠错"])
@@ -104,6 +107,7 @@ def _report_item(conn, r) -> dict:
         "question": {
             "id": q.get("id", 0),
             "qtype": q.get("qtype", ""),
+            "qtype_label": QTYPE_NAMES.get(q.get("qtype", ""), "题目"),
             "content": q.get("content", ""),
             "options": options,
             "answer": q.get("answer", ""),
@@ -152,19 +156,30 @@ def handle_report(report_id: int, body: HandleBody, admin: dict = Depends(get_cu
             ).fetchone()
             if not q:
                 raise HTTPException(status_code=404, detail="题目已被删除，无法采纳")
-            suggested = rep["suggested_answer"].strip().upper()
+            suggested_raw = rep["suggested_answer"].strip()
+            suggested = suggested_raw.upper()
             options = json.loads(q["options_json"])
-            if q["qtype"] == "judge":
+            qtype = q["qtype"]
+            keys = [o.get("key") for o in options]
+            if qtype == "judge":
                 if suggested not in ("A", "B"):
                     raise HTTPException(status_code=400, detail="判断题答案只能是 正确(A) / 错误(B)")
-            elif q["qtype"] == "single":
-                keys = [o.get("key") for o in options]
+            elif qtype in ("single", "calcsel"):
                 if suggested not in keys:
                     raise HTTPException(status_code=400, detail=f"答案必须是选项字母之一：{'/'.join(keys)}")
-            # calc / short 采纳原样写回
+            elif qtype == "multi":
+                # 多选：建议答案按字母集合归一（'C、A' → 'AC'），并校验都在选项里
+                suggested = normalize_multi_answer(suggested_raw)
+                bad = [ch for ch in suggested if ch not in keys]
+                if not suggested or bad:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"多选题答案必须是选项字母（{'/'.join(keys)}），多个答案连着写，如 AC",
+                    )
+            else:
+                suggested = suggested_raw  # calc / short 参考文本原样写回（不改大小写）
             conn.execute(
-                "UPDATE questions SET answer = ? WHERE id = ?",
-                (suggested if q["qtype"] in ("judge", "single") else rep["suggested_answer"].strip(), q["id"]),
+                "UPDATE questions SET answer = ? WHERE id = ?", (suggested, q["id"])
             )
             conn.execute(
                 """UPDATE question_reports SET status = 'resolved', handled_by = ?, handled_at = ?

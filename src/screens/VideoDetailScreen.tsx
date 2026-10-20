@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { libraryApi, ApiError, type MaterialItem, type MaterialComment } from '../api/client'
 import { Avatar } from '../components/Avatar'
+import { AiVideoSummary } from '../components/AiVideoSummary'
 import {
   ChevronLeftIcon, EyeIcon, HeartIcon, MessageIcon, PlayIcon, TrashIcon, XIcon,
 } from '../components/icons'
@@ -206,7 +207,7 @@ export function VideoDetailScreen({ materialId, onBack }: VideoDetailScreenProps
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 56 }}>
+      <div className="ui-stagger" style={{ paddingBottom: 56 }}>
         {/* 返回栏 */}
         <div className="px-5 pt-12 pb-3 flex items-center gap-3">
           <button
@@ -304,6 +305,11 @@ export function VideoDetailScreen({ materialId, onBack }: VideoDetailScreenProps
               {item?.description || '管理员暂未填写简介。'}
             </p>
           </div>
+        </div>
+
+        {/* AI 概括：抽帧看画面 + 标题简介，先抓重点再决定要不要精看 */}
+        <div className="px-4 mt-4">
+          <AiVideoSummary materialId={materialId} />
         </div>
 
         {/* 评论区（楼中楼） */}

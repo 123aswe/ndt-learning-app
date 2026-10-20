@@ -18,8 +18,9 @@
   - 未作答的题不写 exam_answers / answer_records（与练习口径一致），判分按错算
 
 修改注意：
-  - 改判分逻辑只需要动 _grade_answer()；答案比对统一 strip + upper
-  - 新增题型不需要改本模块（qtype 只是过滤条件，判分按 questions.answer 比对）
+  - 改判分逻辑只需要动 _grade_answer()（它转发到 bank.answers_match，与练习页前端同口径）；
+    多选（multi）按字母集合比对，顺序无关
+  - 新增题型只要在 bank.QTYPE_NAMES 里登记就能被本模块的出题筛选识别，判分自动走新口径
 """
 
 import json
@@ -30,7 +31,15 @@ from pydantic import BaseModel, Field
 
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_user
-from modules.bank import METHOD_NAMES, QTYPE_NAMES, _question_public
+from modules.bank import (
+    MULTI_QTYPES,
+    METHOD_NAMES,
+    QTYPE_FILTER,
+    QTYPE_NAMES,
+    _question_public,
+    answers_match,
+    normalize_multi_answer,
+)
 
 router = APIRouter(prefix="/api/exam", tags=["模拟考试"])
 
@@ -40,14 +49,16 @@ router = APIRouter(prefix="/api/exam", tags=["模拟考试"])
 class StartBody(BaseModel):
     category: str = Field(default="综合", max_length=8)      # 方向代码 / 综合
     set_id: int = Field(default=0, ge=0)                     # 自定义题库 id（0 = 内置）
-    qtype: str = Field(default="", pattern="^(|judge|single|calc|short)$")
+    set_ids: list[int] = Field(default_factory=list, max_length=100)  # 多题库合集（v1.77 系列全部）
+    qtype: str = Field(default="", pattern=QTYPE_FILTER)
     count: int = Field(default=50, ge=1, le=200)             # 抽题数量（超过库存取库存）
     duration_minutes: int = Field(default=60, ge=1, le=300)  # 考试时长
 
 
 class SubmitAnswer(BaseModel):
     question_id: int
-    user_answer: str = Field(default="", max_length=8)
+    # 选择/判断题是选项字母（<=8 个选项）；计算题是考生手写的答案文本，所以留到 200 字
+    user_answer: str = Field(default="", max_length=200)
 
 
 class SubmitBody(BaseModel):
@@ -59,9 +70,12 @@ class SubmitBody(BaseModel):
 
 # ── 内部工具 ────────────────────────────────────────────────
 
-def _grade_answer(my_answer: str, correct: str) -> bool:
-    """判分：统一去空白 + 转大写后比对（判断题/选择题/计算题答案都是字母或短文本）。"""
-    return (my_answer or "").strip().upper() == (correct or "").strip().upper()
+def _grade_answer(qtype: str, my_answer: str, correct: str) -> bool:
+    """判分：走 bank.answers_match 的统口径（多选按字母集合比，其余 strip + upper）。
+
+    口径与练习页前端完全一致（前端 src/data/qtypes.ts 的 answersMatch），改判分逻辑只需动这里。
+    """
+    return answers_match(qtype, my_answer, correct)
 
 
 def _get_own_exam(conn, exam_id: str, user_id: int) -> dict:
@@ -106,7 +120,33 @@ def start_exam(body: StartBody, user: dict = Depends(get_current_user)):
     with get_conn() as conn:
         # ── 出题范围 ──
         title = ""
-        if body.set_id:
+        if body.set_ids:
+            # v1.77 多题库合集（题库系列「系列全部」）：
+            #   全部题库同属一个系列 → 试卷名用系列名；单个散题库 → 题库名；混搭 → 自选题库合集
+            ids = sorted({i for i in body.set_ids if i > 0})
+            if not ids:
+                raise HTTPException(status_code=400, detail="题库范围不合法")
+            ph = ",".join("?" * len(ids))
+            sets_rows = conn.execute(
+                f"SELECT id, name, series_id FROM question_sets WHERE id IN ({ph})", ids
+            ).fetchall()
+            if len(sets_rows) != len(ids):
+                raise HTTPException(status_code=404, detail="题库不存在")
+            where, params = f"WHERE set_id IN ({ph})", list(ids)
+            sids = {r["series_id"] for r in sets_rows}
+            if len(sids) == 1:
+                sid = next(iter(sids))
+                if sid:
+                    srow = conn.execute("SELECT name FROM question_set_series WHERE id = ?", (sid,)).fetchone()
+                    title = srow["name"] if srow else "题库系列合集"
+                elif len(sets_rows) == 1:
+                    title = sets_rows[0]["name"]
+                else:
+                    title = "自选题库合集"
+            else:
+                title = "自选题库合集"
+            category = ""
+        elif body.set_id:
             s = conn.execute("SELECT id, name FROM question_sets WHERE id = ?", (body.set_id,)).fetchone()
             if not s:
                 raise HTTPException(status_code=404, detail="题库不存在")
@@ -146,11 +186,13 @@ def start_exam(body: StartBody, user: dict = Depends(get_current_user)):
             ),
         )
 
-        # 题目公开格式但**不带 answer**（考试模式防偷看）
+        # 题目公开格式但**不带 answer / explanation**（考试模式防偷看：
+        # 解答过程里往往就写着答案）
         questions = []
         for r in rows:
             pub = _question_public(row_to_dict(r))
             pub.pop("answer", None)
+            pub.pop("explanation", None)
             questions.append(pub)
 
     return {
@@ -189,7 +231,7 @@ def submit_exam(body: SubmitBody, user: dict = Depends(get_current_user)):
             qmap = {
                 r["id"]: row_to_dict(r)
                 for r in conn.execute(
-                    f"SELECT id, method, answer FROM questions WHERE id IN ({marks})",
+                    f"SELECT id, method, qtype, answer FROM questions WHERE id IN ({marks})",
                     [a.question_id for a in answers],
                 ).fetchall()
             }
@@ -197,7 +239,13 @@ def submit_exam(body: SubmitBody, user: dict = Depends(get_current_user)):
                 q = qmap.get(a.question_id)
                 if not q:
                     continue  # 题目已被管理员删除：跳过不计
-                is_correct = _grade_answer(a.user_answer, q["answer"])
+                is_correct = _grade_answer(q["qtype"], a.user_answer, q["answer"])
+                # 多选存归一化后的字母串（'CA' → 'AC'），回看时高亮不会因顺序漏判
+                saved = (
+                    normalize_multi_answer(a.user_answer)
+                    if q["qtype"] in MULTI_QTYPES
+                    else a.user_answer.strip().upper()
+                )
                 correct += 1 if is_correct else 0
                 conn.execute(
                     """INSERT INTO exam_answers (exam_id, question_id, user_answer, is_correct)
@@ -205,7 +253,7 @@ def submit_exam(body: SubmitBody, user: dict = Depends(get_current_user)):
                        ON CONFLICT(exam_id, question_id)
                        DO UPDATE SET user_answer = excluded.user_answer,
                                      is_correct = excluded.is_correct""",
-                    (exam["id"], a.question_id, a.user_answer.strip().upper(), 1 if is_correct else 0),
+                    (exam["id"], a.question_id, saved, 1 if is_correct else 0),
                 )
                 conn.execute(
                     """INSERT INTO answer_records
@@ -214,7 +262,7 @@ def submit_exam(body: SubmitBody, user: dict = Depends(get_current_user)):
                        VALUES (?,?,?,'answer',?,?,?,?,?)""",
                     (
                         user["id"], a.question_id, q["method"],
-                        a.user_answer.strip().upper(), 1 if is_correct else 0,
+                        saved, 1 if is_correct else 0,
                         body.time_used_seconds, exam["id"], now_iso(),
                     ),
                 )

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { ProgressRing } from '../components/ProgressRing'
-import { ZapIcon, ChevronRightIcon, RefreshIcon, HomeIcon } from '../components/icons'
+import { ZapIcon, ChevronRightIcon, RefreshIcon, HomeIcon, ChevronLeftIcon } from '../components/icons'
 
 /* ============================================================
    练习结果页（苹果式浅色）
@@ -15,6 +15,8 @@ interface PracticeResultScreenProps {
   onRetry: () => void
   onHome: () => void
   onReviewWrong: () => void
+  /** v1.76 底部返回按钮文案：由 App 按「进练习前那一页」给出（如「返回题库」），默认「返回首页」 */
+  backLabel?: string
 }
 
 function formatTime(s: number) {
@@ -31,6 +33,7 @@ export function PracticeResultScreen({
   onRetry,
   onHome,
   onReviewWrong,
+  backLabel = '返回首页',
 }: PracticeResultScreenProps) {
   const accuracy = total > 0 ? Math.round((correct / total) * 100) : 0
   const wrongCount = total - correct
@@ -135,12 +138,13 @@ export function PracticeResultScreen({
             </button>
           )}
 
+          {/* v1.76：从哪进练习就回哪（题库进的 → 返回题库），只有没有来源时才叫「返回首页」 */}
           <button
             onClick={onHome}
             className="w-full h-12 gb gb-ghost font-semibold text-sm flex items-center justify-center gap-2"
           >
-            <HomeIcon size={16} />
-            返回首页
+            {backLabel === '返回首页' ? <HomeIcon size={16} /> : <ChevronLeftIcon size={16} />}
+            {backLabel}
           </button>
         </div>
       </div>

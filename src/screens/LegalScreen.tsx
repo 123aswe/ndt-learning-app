@@ -20,7 +20,7 @@ export function LegalScreen({ docKey, onBack }: LegalScreenProps) {
   const doc = LEGAL_DOCS[docKey]
 
   return (
-    <div className="scroll-area bg-page">
+    <div className="scroll-area bg-page ui-stagger">
       {/* 顶栏：返回 + 标题 */}
       <div className="flex items-center gap-3 px-5 pt-14 pb-4">
         <button

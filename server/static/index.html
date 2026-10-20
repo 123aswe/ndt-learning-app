@@ -4,14 +4,19 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>管理后台登录 · NDT-劳人</title>
+  <link rel="icon" type="image/jpeg" href="/site-assets/logo.jpg" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <!-- 管理后台登录页：账号密码登录 → 存 token → 跳 dashboard.html -->
   <div class="login-page">
     <div class="card login-card">
+      <!-- 返回：回考生端登录/注册页（/app/，未登录时即登录注册屏） -->
+      <div class="back-row">
+        <button class="btn" id="back-btn" type="button">&larr; 返回</button>
+      </div>
       <div class="brand">
-        <div class="login-logo">NDT</div>
+        <img class="login-logo" src="/site-assets/logo.jpg" alt="NDT-劳人" />
         <h1>NDT-劳人 管理后台</h1>
         <p>无损检测学习与考试训练平台</p>
       </div>

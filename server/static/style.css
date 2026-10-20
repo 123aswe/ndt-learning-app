@@ -53,6 +53,24 @@ a { color: var(--accent); text-decoration: none; }
 .topbar h1 { font-size: 16px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
 .topbar .spacer { flex: 1; }
 .topbar .who { color: var(--text-2); font-size: 13px; }
+.topbar-logo {
+  width: 30px; height: 30px; border-radius: 9px; object-fit: cover; flex: none;
+  box-shadow: 0 2px 8px rgba(95, 141, 140, 0.25);
+}
+
+/* ── 公网地址横幅（SakuraFrp 隧道地址，从 /api/admin/tunnel 读取） ── */
+.tunnel-banner {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  padding: 11px 14px; border-radius: 12px; font-size: 12.5px; margin-bottom: 14px;
+  background: rgba(95, 141, 140, 0.1); color: var(--text-2);
+  border: 1px solid rgba(95, 141, 140, 0.28);
+}
+.tunnel-banner.hidden { display: none; }
+.tunnel-banner .tb-main { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.tunnel-banner .tb-title { font-weight: 700; color: var(--text-1); flex: none; }
+.tunnel-banner .tb-url { color: var(--accent-deep, #4e7574); font-weight: 600; word-break: break-all; }
+.tunnel-banner .tb-time { color: var(--text-3); flex: none; }
+.tunnel-banner .tb-actions { display: flex; gap: 8px; margin-left: auto; }
 
 .wrap { max-width: 1180px; margin: 0 auto; padding: 22px 24px 60px; }
 
@@ -249,13 +267,15 @@ img.ava { object-fit: cover; }
 
 .login-page { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
 .login-card { width: 100%; max-width: 380px; }
+.login-card .back-row { margin-bottom: 14px; }
+.login-card .back-row .btn { font-size: 12.5px; color: var(--text-2); }
 .login-card .brand { text-align: center; margin-bottom: 22px; }
 .login-card .brand h1 { font-size: 20px; margin: 0 0 4px; }
 .login-card .brand p { margin: 0; color: var(--text-3); font-size: 12px; }
 .login-logo {
-  width: 54px; height: 54px; border-radius: 16px; margin: 0 auto 12px;
-  background: var(--accent); color: #fff; display: flex; align-items: center; justify-content: center;
-  font-size: 22px; font-weight: 700; box-shadow: 0 8px 24px rgba(95, 141, 140, 0.28);
+  width: 54px; height: 54px; border-radius: 16px; margin: 0 auto 12px; object-fit: cover;
+  box-shadow: 0 8px 24px rgba(95, 141, 140, 0.28);
+  display: block;
 }
 
 /* ── 提示 ────────────────────────────────────────────────── */
@@ -322,3 +342,131 @@ img.ava { object-fit: cover; }
   .topbar { padding: 12px 14px; }
   .toolbar .input, .toolbar select.input { width: 100%; }
 }
+
+/* ── 题目插图（题干 / 选项 / 答案解析里的 [[img:xxx]] 标记，见 modules/question_images.py） ──
+   统一显示规则：高度上限 180px、宽度不超容器、等比缩放；点一下看大图。
+   列表里用 .rt-img-sm（100px）省地方。改这里 = 后台所有插图一起改。 */
+.rt-img {
+  display: block; width: auto; height: auto;
+  max-width: 100%; max-height: 180px;
+  object-fit: contain;
+  margin: 6px 0; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface-warm);
+  cursor: zoom-in; vertical-align: top;
+}
+.rt-img-sm { max-height: 100px; margin: 4px 0; }
+/* 固定插图区（richTextHtml 的 .rt-img-area，v1.34）—— 考生端同口径在 src/index.css，改一边同步另一边：
+   一段文字里的所有图片收进同一个固定高度的区域，每张图固定占位等比缩放（不裁剪都看得到），
+   右侧滚动条常驻（overflow-y:scroll + 显式 webkit 样式，不靠全局默认）。 */
+.rt-img-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 200px;
+  padding: 8px;
+  margin: 6px 0;
+  overflow-y: scroll;                       /* 滚动条常驻，内容不满也显示轨道 */
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-warm);
+  scrollbar-width: thin;                    /* Firefox */
+  scrollbar-color: var(--line-strong) transparent;
+}
+.rt-img-area::-webkit-scrollbar { display: block; width: 8px; }
+.rt-img-area::-webkit-scrollbar-track { background: transparent; }
+.rt-img-area::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+.rt-img-area::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+.rt-img-area .rt-img { width: 100%; height: 160px; max-height: none; margin: 0; flex: none; }
+.rt-img-area.rt-img-area-lg { height: 260px; }
+.rt-img-area.rt-img-area-lg .rt-img { height: 220px; }
+.rt-img-area .rt-img-dead { width: 100%; height: 160px; margin: 0; flex: none; }
+
+/* 大表固定框架：题库列表这类长表——卡片/表头固定，内容上下左右都能滚 */
+.table-wrap.table-fixed {
+  max-height: min(62vh, 640px);
+  overflow: auto;                           /* 纵向 + 横向一起开 */
+  overscroll-behavior: contain;
+  scrollbar-width: thin;                    /* Firefox */
+  scrollbar-color: var(--line-strong) transparent;
+}
+.table-fixed thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  box-shadow: 0 1px 0 var(--line);          /* 吸顶后补回被滚走的下边线 */
+}
+.rt-img-dead {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 110px; height: 60px; padding: 0 12px; margin: 4px 0;
+  font-size: 12px; color: var(--text-3);
+  border: 1px dashed var(--line-strong); border-radius: 10px; background: var(--surface-warm);
+}
+/* 插图工具条 + 实时预览（添加/编辑题目弹窗） */
+.rt-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.rt-preview {
+  margin-top: 8px; padding: 10px 12px; border: 1px dashed var(--line-strong);
+  border-radius: 10px; background: var(--surface-warm);
+  font-size: 13px; line-height: 1.7; color: var(--text-2);
+  white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow: auto;
+}
+.rt-preview:empty { display: none; }
+/* 选项插图按钮组：先点 A / B / C … 选选项，图片插到那个选项后面 */
+.rt-opt-wrap { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rt-opt { min-width: 36px; justify-content: center; font-weight: 600; letter-spacing: 0.02em; }
+.rt-opt-new { min-width: 54px; font-weight: 500; opacity: 0.88; }
+/* 预览里一行一个选项：字母 + 内容（内容里可能是图） */
+.rt-opt-line { display: flex; gap: 6px; align-items: flex-start; margin: 2px 0; }
+.rt-opt-key { flex: none; font-weight: 600; color: var(--text-3); }
+.rt-opt-text { min-width: 0; }
+/* 关键词搜索命中高亮（题目管理列表，见 dashboard.js richTextSearchHtml） */
+.rt-hit {
+  background: var(--accent-weak); color: var(--accent);
+  border-radius: 4px; padding: 0 2px; font-weight: 600;
+}
+/* 大图浮层 */
+.rt-zoom-mask {
+  position: fixed; inset: 0; z-index: 9999; padding: 24px 16px;
+  background: rgba(12, 14, 16, 0.82);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+  cursor: zoom-out;
+}
+.rt-zoom-mask img { max-width: 94vw; max-height: 84vh; border-radius: 12px; background: #fff; box-shadow: 0 12px 48px rgba(0,0,0,0.45); }
+.rt-zoom-mask p { margin: 0; font-size: 12px; color: rgba(255,255,255,0.72); }
+
+/* ── 网络访问卡片（dashboard.html #net-card，后端 modules/network.py） ── */
+.net-card { margin-bottom: 14px; }
+.net-row {
+  display: flex; align-items: center; gap: 16px;
+  padding: 12px 0; border-top: 1px solid var(--line);
+}
+.net-row:first-of-type { border-top: none; padding-top: 4px; }
+.net-main { flex: 1; min-width: 0; }
+.net-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.net-name { font-weight: 600; color: var(--text-1); }
+.net-state { font-size: 12px; padding: 1px 8px; border-radius: 999px; }
+.net-state.on { color: var(--ok); background: rgba(111, 163, 124, 0.12); }
+.net-state.off { color: var(--text-3); background: rgba(154, 161, 169, 0.12); }
+.net-state.busy { color: var(--warn); background: rgba(201, 162, 39, 0.12); }
+.net-urls { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.net-url-line { display: flex; align-items: center; gap: 8px; font-size: 12.5px; }
+.net-url-label { flex: none; color: var(--text-3); width: 68px; }
+.net-url-line a { color: var(--accent-deep, #4e7574); font-weight: 600; word-break: break-all; min-width: 0; }
+.net-url-line .btn { flex: none; }
+.net-tip { color: var(--text-3); font-size: 12px; margin-top: 6px; word-break: break-all; }
+
+/* 开关（局域网访问） */
+.switch { position: relative; width: 46px; height: 26px; flex: none; cursor: pointer; }
+.switch input { display: none; }
+.net-slider {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: #d7dade; border: 1px solid var(--line);
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+.net-slider::before {
+  content: ""; position: absolute; width: 20px; height: 20px; border-radius: 50%;
+  left: 2px; top: 2px; background: #fff; box-shadow: 0 1px 3px rgba(27, 30, 35, 0.25);
+  transition: transform 0.2s ease;
+}
+.switch input:checked + .net-slider { background: var(--accent); border-color: var(--accent); }
+.switch input:checked + .net-slider::before { transform: translateX(20px); }
+.switch input:disabled + .net-slider { opacity: 0.55; cursor: not-allowed; }

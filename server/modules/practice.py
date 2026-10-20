@@ -4,7 +4,7 @@
 接口（全部需要考生登录，数据按 user_id 严格隔离）：
   GET  /api/practice/questions?category=UT&mode=sequential|random|wrong&qtype=&topic=&limit=2000
        取一组题目；顺序练习默认返回范围内全部题目（按 id 升序），topic 传知识点即按章节
-       练习（整章一起练）；qtype 传 judge|single|calc 按题型筛选（空 = 不限）；
+       练习（整章一起练）；qtype 传 judge|single|multi|calc|calcsel|short 按题型筛选（空 = 不限）；
        每题附 my_state（我最近一次对/错，保留到清除记录为止）
   GET  /api/practice/blocks?category=&topic=&qtype=&limit=20
        分块列表：每组未做/对/错数量（题库页「选择练习方式」面板用）
@@ -55,7 +55,7 @@ from pydantic import BaseModel, Field
 from database import get_conn, now_iso, row_to_dict
 from deps import get_current_user
 from modules.achievements import build_achievements
-from modules.bank import METHOD_NAMES, _question_public
+from modules.bank import METHOD_NAMES, QTYPE_FILTER, _question_public
 from modules.exam import _exam_summary, _get_own_exam
 
 router = APIRouter(prefix="/api/practice", tags=["练习"])
@@ -68,7 +68,8 @@ DAILY_GOAL = 60  # 首页进度环的每日目标题数（与前端展示一致�
 
 class SubmitAnswer(BaseModel):
     question_id: int
-    user_answer: str = Field(default="", max_length=8)
+    # 多选题的答案是字母串（如 'ACD'）；计算题/简答题是考生手写的答案文本，所以留到 200 字
+    user_answer: str = Field(default="", max_length=200)
     is_correct: bool
 
 
@@ -118,14 +119,22 @@ def _wrong_question_ids(conn, user_id: int, category: str = "") -> list[int]:
     return [r["question_id"] for r in conn.execute(sql, params).fetchall()]
 
 
-QTYPE_FILTER = "^(|judge|single|calc|short)$"  # 题型筛选参数的共用正则（空=不限）
+# 题型筛选参数的共用正则（空=不限）：从 bank.QTYPE_FILTER 导入，本文件各处 pattern 直接引用
 
 
 def _scope_where(category: str, topic: str = "", set_id: int = 0, qtype: str = "") -> tuple[str, list]:
-    """出题范围 SQL 片段：set_id>0 = 管理员创建的自定义题库（忽略方向/章节）；
-    否则按方向（综合=全部）+ 可选章节（topic1 精确匹配）+ 可选题型（qtype）。"""
+    """出题范围 SQL 片段。
+
+    - set_id > 0：管理员创建的自定义题库；此时 topic 表示**该题库里的章节**（topic1 精确匹配），
+      不传 topic = 整套题库顺序练（方向/级别忽略）
+    - 否则：按方向（综合=全部）+ 可选章节（topic1 精确匹配）
+    两种情况都可再按题型（qtype）过滤。
+    """
     if set_id:
         where, params = "WHERE set_id = ?", [set_id]
+        if topic:
+            where += " AND topic1 = ?"
+            params.append(topic)
     else:
         where = ""
         params: list = []
@@ -193,7 +202,7 @@ def _session_duration_sql(where: str, params: list) -> str:
 def get_questions(
     category: str = Query(default="综合", max_length=8),
     mode: str = Query(default="sequential", pattern="^(sequential|random|wrong)$"),
-    qtype: str = Query(default="", pattern="^(|judge|single|calc|short)$"),
+    qtype: str = Query(default="", pattern=QTYPE_FILTER),
     topic: str = Query(default="", max_length=50),
     set_id: int = Query(default=0, ge=0),
     block: int = Query(default=-1, ge=-1, le=10000),
@@ -203,8 +212,9 @@ def get_questions(
     """顺序练习默认返回范围内**全部题目**（按 id 升序，block=-1 不分块）；
     block=N 时取第 N+1 组（每组 limit 题，兼容旧分块调用）。
     topic 传知识点（topic1）即为「按章节练习」（整章一起练）。
-    qtype 传 judge|single|calc|short 按题型筛选（空 = 不限）。
-    set_id 传自定义题库 id（管理员后台创建的题库），传了就忽略 category/topic。
+    qtype 传 judge|single|multi|calc|calcsel|short 按题型筛选（空 = 不限）。
+    set_id 传自定义题库 id（管理员后台创建的题库）；传了 set_id 时 topic 表示**该题库里的章节**
+    （topic1 精确匹配），不传 topic 就是整套题库；内置题库伪 id 见 question_sets.BUILTIN_SETS。
     每题附 my_state（我最近一次对/错，一直保留到清除记录为止）；
     mode=random/wrong 时忽略 topic/block。"""
     with get_conn() as conn:
@@ -798,8 +808,9 @@ def stats_report(
             [uid, start],
         ).fetchone()["s"] or 0
 
-        # 学习日历：近 35 天每日答题量
-        cal_start = (today - timedelta(days=34)).strftime("%Y-%m-%d")
+        # 学习日历：近 140 天（20 周）每日答题量，足够前端按月翻页浏览
+        CAL_DAYS = 140
+        cal_start = (today - timedelta(days=CAL_DAYS - 1)).strftime("%Y-%m-%d")
         by_day = {
             r["d"]: r["n"]
             for r in conn.execute(
@@ -811,9 +822,9 @@ def stats_report(
             ).fetchall()
         }
         calendar = [
-            {"date": (today - timedelta(days=34 - i)).strftime("%Y-%m-%d"),
-             "count": by_day.get((today - timedelta(days=34 - i)).strftime("%Y-%m-%d"), 0)}
-            for i in range(35)
+            {"date": (today - timedelta(days=CAL_DAYS - 1 - i)).strftime("%Y-%m-%d"),
+             "count": by_day.get((today - timedelta(days=CAL_DAYS - 1 - i)).strftime("%Y-%m-%d"), 0)}
+            for i in range(CAL_DAYS)
         ]
 
         # 知识掌握度：按方向统计（全量，不限周期）

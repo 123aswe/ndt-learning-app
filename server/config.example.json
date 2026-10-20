@@ -2,8 +2,14 @@
   "_说明": "把本文件复制为 config.json 后填写。config.json 含密钥，不要提交到 git（.gitignore 已忽略）。",
 
   "server": {
-    "host": "127.0.0.1",
+    "_说明": "host 固定 0.0.0.0：本机/局域网/公网隧道共用一个监听，「谁能访问」由 lan_access.enabled 控制（关=只有本机能访问，与旧版一致）。",
+    "host": "0.0.0.0",
     "port": 8000
+  },
+
+  "lan_access": {
+    "_说明": "局域网访问开关：false 时非本机请求一律 403；管理后台「网络访问」卡片可一键开关，状态写回 config.json。",
+    "enabled": false
   },
 
   "database": {
@@ -11,7 +17,8 @@
   },
 
   "security": {
-    "token_ttl_hours": 24,
+    "_说明": "token_ttl_hours：登录令牌有效期（小时）。360 = 15 天，且有效期内每访问一次自动续期 —— 即「15 天不登录才需要重新登录」。",
+    "token_ttl_hours": 360,
     "pbkdf2_iterations": 200000
   },
 
@@ -35,6 +42,22 @@
     "resend_interval_seconds": 60,
     "daily_limit_per_phone": 10,
     "max_verify_attempts": 5
+  },
+
+  "realtime": {
+    "_说明": "实时通道（SSE）：通知/评论回复/版本更新写库后立刻推给在线考生，不再等前端轮询。关掉后前端自动退回轮询。",
+    "enabled": true,
+    "heartbeat_seconds": 15
+  },
+
+  "ai": {
+    "_说明": "AI 智能助手（题目 AI 解析 + 视频 AI 概括），走智谱开放平台 BigModel（GLM）。api_key 形如 xxxxxxxx.yyyyyyyy（在 https://open.bigmodel.cn 的 API Keys 页生成），只放这里不要进前端；为空时 AI 按钮显示「未配置」。video_frames 是抽帧张数，抽到的画面会先拼成一张宫格图再送视觉模型（glm-4v-flash 单次最多只接受 5 张图），所以这个值可以放心调大（上限 8）。",
+    "api_key": "",
+    "base_url": "https://open.bigmodel.cn/api/paas/v4",
+    "chat_model": "glm-4-flash",
+    "vision_model": "glm-4v-flash",
+    "timeout_seconds": 120,
+    "video_frames": 6
   },
 
   "frontend_origins": [

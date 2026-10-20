@@ -1,6 +1,12 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-
-@import 'tailwindcss';
+/* ⚠️ 不带 @layer 引入 Tailwind（微信开发者工具的模拟器内核不识别 CSS @layer，
+   默认 `@import 'tailwindcss'` 会把全部样式包进 @layer → 小程序 web-view 里整站样式失效）。
+   按 theme → preflight → utilities 的顺序平铺引入，级联结果与带 layer 时一致：
+   preflight 在最前、自定义样式随后、utilities 最后（工具类仍能覆盖前面的一切）。
+   注：原来的 Google Fonts @import 已移除 —— 国内访问不到会挂起整个样式表
+   （web-view 里长时间白屏）；Inter 不存在时自动落到后面的系统中文字体，观感几乎无差。 */
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/preflight.css';
+@import 'tailwindcss/utilities.css';
 
 /* ============================================================
    NDT-劳人 · Design System
@@ -32,7 +38,38 @@
   /* 阴影（非常轻） */
   --shadow-card: 0 1px 2px rgba(27,30,35,0.04), 0 4px 16px rgba(27,30,35,0.05);
   --shadow-soft: 0 1px 2px rgba(27,30,35,0.03);
+
+  /* ⚠️ 覆写项目里用到的 Tailwind 默认调色板色（oklch → hex）。
+     老内核（微信开发者工具模拟器 / 旧安卓 webview）不识别 oklch()，
+     不覆写的话 slate-* / emerald-* 等工具类在这些环境会整体失效。
+     色值由 Tailwind v4 默认主题的 oklch 精确换算而来，现代浏览器观感零变化。
+     以后若新增用到其它默认调色板色阶，需要在这里同步补 hex。 */
+  --color-slate-50: #F8FAFC;
+  --color-slate-100: #F1F5F9;
+  --color-slate-200: #E2E8F0;
+  --color-slate-300: #CAD5E2;
+  --color-slate-400: #90A1B9;
+  --color-slate-500: #62748E;
+  --color-slate-600: #45556C;
+  --color-slate-700: #314158;
+  --color-slate-800: #1D293D;
+  --color-slate-900: #0F172B;
+  --color-emerald-100: #D0FAE5;
+  --color-emerald-200: #A4F4CF;
+  --color-emerald-300: #5EE9B5;
+  --color-emerald-400: #00D492;
+  --color-emerald-500: #00BC7D;
+  --color-emerald-600: #009966;
+  --color-teal-500: #00BBA7;
+  --color-rose-500: #FF2056;
 }
+
+/* ⚠️ 渐变老内核兼容：Tailwind v4 把方向渐变编译成 `--tw-gradient-position: to right in oklab`，
+   微信开发者工具模拟器等老内核不识别渐变的 `in oklab` 插值 → 整条 background-image 失效，
+   按钮变透明、白色按钮文字看不见（真机新内核正常显示）。
+   在 utilities 之后重声明为普通方向值，平铺引入下级联靠后覆盖；现代浏览器渲染结果不变。
+   以后若新增其它方向的渐变类（to-b / to-br / to-tr…），要在这里同步补对应覆写。 */
+.bg-gradient-to-r { --tw-gradient-position: to right; }
 
 :root {
   --bg: #F3F4F6;
@@ -466,6 +503,560 @@ body::before {
 .d-350 { animation-delay: 0.35s; }
 .d-400 { animation-delay: 0.40s; }
 
+/* ── 整屏进场：一级分区错峰淡入 + 轻微上浮（与首页同一节奏，全站复用） ──
+   用法：给整屏内容容器（.scroll-area.bg-page 里的那一层）加 className="ui-stagger"，
+   直接子元素按顺序错峰进场；只动 opacity / transform（走合成层）→ 流畅不掉帧。
+   选择器全部包在 :where() 里（零特异性）→ 子元素自带的 animation（toast / 骨架屏 /
+   浮层 .anim-* ）优先级更高，不会被这里的规则覆盖。 */
+@keyframes uiStaggerIn {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+:where(.ui-stagger) > * { animation: uiStaggerIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+:where(.ui-stagger > *:nth-child(1)) { animation-delay: 0s; }
+:where(.ui-stagger > *:nth-child(2)) { animation-delay: 0.10s; }
+:where(.ui-stagger > *:nth-child(3)) { animation-delay: 0.15s; }
+:where(.ui-stagger > *:nth-child(4)) { animation-delay: 0.20s; }
+:where(.ui-stagger > *:nth-child(5)) { animation-delay: 0.25s; }
+:where(.ui-stagger > *:nth-child(6)) { animation-delay: 0.30s; }
+:where(.ui-stagger > *:nth-child(n+7)) { animation-delay: 0.35s; }
+/* 浮层（fixed 弹层）排除在整屏进场之外：容器加 no-stagger，
+   否则弹层打开时会跟着播一遍淡入上浮、还有 0.3s 延迟。 */
+:where(.ui-stagger) > .no-stagger { animation: none !important; }
+/* 用户开启「减少动态效果」时直接显示，不做位移 */
+@media (prefers-reduced-motion: reduce) {
+  :where(.ui-stagger) > * { animation: none; }
+}
+
+/* ── 音乐播放页（MusicScreen）四角星粒子动效 ──
+   music-float：主星缓慢上下浮动 + 轻转；music-twinkle：透明度/缩放闪烁；
+   music-drift：小星缓慢漂移。只动 transform / opacity（合成层）。
+   减少动态效果时一并停掉。 */
+@keyframes musicFloat {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50%      { transform: translateY(-14px) rotate(8deg); }
+}
+@keyframes musicTwinkle {
+  0%, 100% { opacity: 0.95; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(0.85); }
+}
+@keyframes musicDrift {
+  0%, 100% { transform: translate(0, 0); }
+  33%      { transform: translate(7px, -9px); }
+  66%      { transform: translate(-6px, 7px); }
+}
+.music-float   { animation: musicFloat 6s ease-in-out infinite; }
+.music-twinkle { animation: musicTwinkle 2.8s ease-in-out infinite; }
+.music-drift   { animation: musicDrift 9s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .music-float, .music-twinkle, .music-drift { animation: none; }
+}
+
+/* 音乐首页悬浮播放条里的小唱片：播放中匀速旋转（暂停由行内 animationPlayState 控制） */
+@keyframes musicSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.music-spin { animation: musicSpin 9s linear infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .music-spin { animation: none; }
+}
+
+/* v1.72 全局悬浮球播放器：展开面板从球的一侧缩放展开（transform-origin 由 JS 按左右侧设置） */
+@keyframes musicFabPanel {
+  from { opacity: 0; transform: scale(0.86); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.music-fab-panel { animation: musicFabPanel 0.18s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .music-fab-panel { animation: none; }
+}
+
+/* v1.70：播放页 ↔ 歌词页 横向滑动翻页（QQ 音乐式）——
+   进歌词页时页面从右侧滑入（music-page-in-right），滑回播放页时从左侧滑入（music-page-in-left）。
+   只动 transform / opacity（合成层），减少动态效果时停用。 */
+@keyframes musicPageRight { from { opacity: 0; transform: translateX(56px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes musicPageLeft  { from { opacity: 0; transform: translateX(-56px); } to { opacity: 1; transform: translateX(0); } }
+.music-page-in-right { animation: musicPageRight 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.music-page-in-left  { animation: musicPageLeft  0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .music-page-in-right, .music-page-in-left { animation: none; }
+}
+
+/* v1.59：播放页歌词区改回卡拉OK逐字填充面板（KaraokeLyrics 自带行内滚动 +
+   上下边缘 mask 渐隐），原来的单行淡入样式已无引用，移除。 */
+
+/* ============================================================
+   音乐播放页 —— 按封面取色的动态氛围（Google Material You / Gemini 风格）
+   - .music-ambient：背景主色渐变 + 两枚柔光光斑缓慢流动（只动 transform/opacity）
+   - 全部由 JS 写入的 CSS 变量驱动：--mu-a（主色）/ --mu-b（辅色）/ --mu-glow（光晕）
+   - 切歌时颜色走 transition 平滑过渡，不闪
+   ============================================================ */
+.music-ambient {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(120% 60% at 50% -8%, var(--mu-glow) 0%, transparent 62%),
+    linear-gradient(180deg, var(--mu-a) 0%, var(--mu-b) 100%);
+  transition: background 1.2s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* 光斑 A / B：大而弥散，漂移 + 微微放大（不用 filter 以保性能）
+   ⚠️ v1.73：will-change 从常驻改为「只有播放中才挂」（.is-active）——
+   常驻会让两枚大光斑永久占着合成层，暂停后也白占显存。
+   暂停时 .is-paused 停住动画，不再空转。 */
+.music-ambient::before,
+.music-ambient::after {
+  content: '';
+  position: absolute;
+  border-radius: 50%;
+}
+.music-ambient.is-active::before,
+.music-ambient.is-active::after {
+  will-change: transform, opacity;
+}
+.music-ambient.is-paused::before,
+.music-ambient.is-paused::after {
+  animation-play-state: paused;
+}
+.music-ambient::before {
+  width: 62%;
+  aspect-ratio: 1;
+  top: -12%;
+  left: -18%;
+  background: radial-gradient(circle at 50% 50%, var(--mu-glow) 0%, transparent 68%);
+  opacity: 0.85;
+  animation: muBlobA 18s ease-in-out infinite;
+}
+.music-ambient::after {
+  width: 54%;
+  aspect-ratio: 1;
+  bottom: -16%;
+  right: -14%;
+  background: radial-gradient(circle at 50% 50%, var(--mu-glow) 0%, transparent 70%);
+  opacity: 0.7;
+  animation: muBlobB 22s ease-in-out infinite;
+}
+@keyframes muBlobA {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33%      { transform: translate3d(6%, 8%, 0) scale(1.12); }
+  66%      { transform: translate3d(-4%, 4%, 0) scale(0.94); }
+}
+@keyframes muBlobB {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  40%      { transform: translate3d(-7%, -6%, 0) scale(1.10); }
+  75%      { transform: translate3d(5%, -3%, 0) scale(0.92); }
+}
+/* 切歌时主色平滑过渡（背景渐变上面已 transition，光斑颜色由 --mu-glow 继承，会跟 background 一起过渡） */
+@media (prefers-reduced-motion: reduce) {
+  .music-ambient::before,
+  .music-ambient::after { animation: none; }
+  .music-ambient { transition: none; }
+}
+
+/* ── 播放页「正在播放」呼吸光环：围绕唱片的一圈随封面主色的柔光，缓慢呼吸
+      （Google Material You 的「动态色彩 + 律动」语言；只用 transform/opacity） ── */
+@keyframes muHalo {
+  0%, 100% { transform: scale(0.94); opacity: 0.55; }
+  50%      { transform: scale(1.06); opacity: 0.9; }
+}
+.music-halo {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 118%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, var(--mu-glow, rgba(140,170,190,0.28)) 0%, transparent 66%);
+  animation: muHalo 4.6s ease-in-out infinite;
+}
+/* 暂停时光环暗淡静止（不抢注意力） */
+.music-halo.is-paused { animation-play-state: paused; opacity: 0.35; }
+
+/* ── 播放页「音波扩散」圈：从唱片向外扩散的水波纹（Material 风的律动反馈）
+      两圈错峰扩散；暂停时停住 ── */
+@keyframes muRipple {
+  0%   { transform: scale(0.86); opacity: 0; }
+  18%  { opacity: 0.42; }
+  100% { transform: scale(1.34); opacity: 0; }
+}
+.music-ripple {
+  position: absolute;
+  inset: -6%;
+  border-radius: 50%;
+  border: 1.5px solid var(--mu-glow, rgba(140,170,190,0.5));
+  pointer-events: none;
+  animation: muRipple 3.6s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+.music-ripple.r2 { animation-delay: 1.8s; }
+.music-ripple.is-paused { animation-play-state: paused; opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .music-halo, .music-ripple { animation: none; }
+  .music-halo { opacity: 0.5; }
+  .music-ripple { opacity: 0; }
+}
+
+/* ── 播放页氛围粒子（Google 风的柔和光点）：缓慢漂浮 + 明暗呼吸，
+      颜色跟随封面主色；数量少、尺寸大、透明度低，只为氛围不抢内容 ── */
+@keyframes muMote {
+  0%   { transform: translate3d(0, 0, 0) scale(1); opacity: 0.30; }
+  50%  { transform: translate3d(6px, -16px, 0) scale(1.24); opacity: 0.62; }
+  100% { transform: translate3d(0, 0, 0) scale(1); opacity: 0.30; }
+}
+.music-mote {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: var(--mu-glow, rgba(140,170,190,0.4));
+  animation: muMote 11s ease-in-out infinite;
+}
+/* v1.73：暂停 / 减少动态效果时光点停住（幅度只有 ~1.5px/s，停住不会被看成"瞬间冻结"，
+   但能让暂停后不再空转）。 */
+.music-mote.is-paused { animation-play-state: paused; }
+@media (prefers-reduced-motion: reduce) {
+  .music-mote { animation: none; opacity: 0.34; }
+}
+
+/* ============================================================
+   v1.73 动效系统升级（Google Pixel / Material 语言）
+   ------------------------------------------------------------
+   【分层原则】解决「多个动画同时修改同一元素，造成冲突」：
+     每个动效各占一层，绝不把 rotate / scale / opacity 写在同一个元素上。
+       封面：律动层 → 呼吸层 → 旋转层 → 内容层
+       悬浮球：光晕 → 拖拽拉伸 → 按压 → 呼吸 → 球体 → 流动 → 高光
+     （代码里踩过一次：rotate 会覆盖元素自身的 transform，两层不能合在一个 div）
+
+   【数据来源】src/hooks/useMusicViz.ts 写入，全部是 CSS 变量：
+     :root 上的设置类（变化少，靠继承）
+       --mv-on      动效总开关 0/1（关 = 全静态）
+       --mv-live    是否拿到真实音频数据 0/1
+       --mv-amp     动态强度
+       --mv-breath  呼吸速度；--mv-breath-dur / --mv-flow-dur 已换算成周期
+       --mv-glow    光晕强度
+     元素上的电平类（每帧更新，只写注册过的元素）
+       --mv-level / --mv-bass / --mv-mid / --mv-b0..11   0~1
+   拿不到真实数据时电平恒为 0 → 自动退化成纯呼吸，绝不用随机数冒充频谱。
+   ============================================================ */
+
+/* ── 1. 封面呼吸：幅度极小（默认 1.4%），暂停时平缓过渡回静止 ──
+   ⚠️ 暂停不用 animation-play-state: paused —— 那会冻在半途。
+   改用「移除动画 + transition 兜底」：动画被移除后计算值变回 scale(1)，
+   transition 接住这个变化，实现"平缓过渡到静止"。 */
+@keyframes musicBreathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(calc(1 + 0.014 * var(--mv-amp, 1))); }
+}
+.music-breathe {
+  animation: musicBreathe var(--mv-breath-dur, 6.4s) cubic-bezier(0.5, 0, 0.5, 1) infinite;
+  transition: transform 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+.music-breathe.is-idle { animation: none; }
+
+/* ── 2. 律动层：真实低频"起音脉冲"驱动，独立一层（与呼吸/旋转互不覆盖） ──
+   ⚠️ 用脉冲（--mv-pulse，低频的上升沿）而不是低频绝对值（--mv-bass）：
+   绝对值做缩放会得到一个恒定偏移，看着像"被永久拉大"而不是"在跳"。
+   拿不到音频数据时 --mv-pulse = 0 → scale(1)，等于不存在。 */
+.music-pulse {
+  transform: scale(calc(1 + var(--mv-pulse, 0) * 0.05 * var(--mv-amp, 1)));
+  will-change: transform;
+}
+
+/* ── 3. 切歌连续过渡：封面用 key 重挂 → 缩放淡入，不"突然替换" ──
+   ⚠️ 只用 transform / opacity（不用 filter:blur —— 滤镜动画在主线程，会掉帧）。
+   挂载点必须在 .music-spin 内部：外面挂 key 会让旋转动画重新开始 → 视觉断层。 */
+@keyframes musicCoverIn {
+  0%   { opacity: 0; transform: scale(0.88); }
+  55%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1); }
+}
+.music-cover-swap { animation: musicCoverIn 0.46s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* ── 4. 唱片外圈频谱光带：12 条沿轮廓起伏的短光带（不是柱状条） ──
+   结构：.music-spectrum > span(按 --i 固定旋转) > i(只做 scaleY)
+   频率分配左右对称 [b0..b5,b5..b0]，两侧接缝同值 → 看不到断点。 */
+.music-spectrum {
+  position: absolute;
+  inset: -7%;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: calc(0.62 * var(--mv-on, 1));
+}
+.music-spectrum > span {
+  position: absolute;
+  inset: 0;
+  transform: rotate(calc(var(--i) * 30deg));
+}
+.music-spectrum > span > i {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  width: 3px;
+  height: 9px;
+  margin-left: -1.5px;
+  border-radius: 2px;
+  background: var(--mu-glow, rgba(140, 170, 190, 0.6));
+  transform-origin: 50% 100%;
+  transform: scaleY(1);
+  opacity: 0.3;
+}
+.music-spectrum > span:nth-child(1)  > i { transform: scaleY(calc(0.85 + var(--mv-b0, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b0, 0) * 0.58); }
+.music-spectrum > span:nth-child(2)  > i { transform: scaleY(calc(0.85 + var(--mv-b1, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b1, 0) * 0.58); }
+.music-spectrum > span:nth-child(3)  > i { transform: scaleY(calc(0.85 + var(--mv-b2, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b2, 0) * 0.58); }
+.music-spectrum > span:nth-child(4)  > i { transform: scaleY(calc(0.85 + var(--mv-b3, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b3, 0) * 0.58); }
+.music-spectrum > span:nth-child(5)  > i { transform: scaleY(calc(0.85 + var(--mv-b4, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b4, 0) * 0.58); }
+.music-spectrum > span:nth-child(6)  > i { transform: scaleY(calc(0.85 + var(--mv-b5, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b5, 0) * 0.58); }
+.music-spectrum > span:nth-child(7)  > i { transform: scaleY(calc(0.85 + var(--mv-b5, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b5, 0) * 0.58); }
+.music-spectrum > span:nth-child(8)  > i { transform: scaleY(calc(0.85 + var(--mv-b4, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b4, 0) * 0.58); }
+.music-spectrum > span:nth-child(9)  > i { transform: scaleY(calc(0.85 + var(--mv-b3, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b3, 0) * 0.58); }
+.music-spectrum > span:nth-child(10) > i { transform: scaleY(calc(0.85 + var(--mv-b2, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b2, 0) * 0.58); }
+.music-spectrum > span:nth-child(11) > i { transform: scaleY(calc(0.85 + var(--mv-b1, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b1, 0) * 0.58); }
+.music-spectrum > span:nth-child(12) > i { transform: scaleY(calc(0.85 + var(--mv-b0, 0) * 1.05)); opacity: calc(0.26 + var(--mv-b0, 0) * 0.58); }
+
+/* ── 5. 播放/暂停主按钮的形态过渡（d 属性插值） ──
+   Chromium 支持 CSS 过渡 path 的 d 属性；不支持时由 JS 降级成交叉淡入。 */
+.music-playpath { transition: d 0.32s cubic-bezier(0.22, 1, 0.36, 1); }
+@keyframes musicBtnRipple {
+  0%   { opacity: 0.5; transform: scale(0.72); }
+  100% { opacity: 0; transform: scale(1.5); }
+}
+.music-btn-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  border: 1.5px solid rgba(111, 163, 201, 0.55);
+  animation: musicBtnRipple 0.52s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── 6. 悬浮球（GlobalMusicFab）动效层 ── */
+
+/* 外光晕：随真实低频脉冲轻微扩张、随整体电平加浓（只在播放时有变化） */
+.music-orb-glow {
+  position: absolute;
+  inset: -30%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 50%, var(--mo-glow, rgba(140, 170, 190, 0.35)) 0%, transparent 68%);
+  opacity: calc((0.34 + var(--mv-level, 0) * 0.5) * var(--mv-glow, 1) * var(--mv-on, 1));
+  transform: scale(calc(1 + var(--mv-pulse, 0) * 0.18 * var(--mv-amp, 1)));
+  will-change: transform, opacity;
+}
+
+/* 按压层：按下压缩（快），释放扩张回弹（慢）—— 连续点击靠强制重排重启动画，不冲突 */
+.music-orb-press {
+  position: absolute;
+  inset: 0;
+  transform: scale(1);
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.music-orb-press.is-down {
+  transform: scale(calc(1 - 0.09 * var(--mv-amp, 1)));
+  transition-duration: 0.12s;
+  transition-timing-function: ease-out;
+}
+@keyframes musicOrbRelease {
+  0%   { transform: scale(calc(1 - 0.09 * var(--mv-amp, 1))); }
+  40%  { transform: scale(calc(1 + 0.055 * var(--mv-amp, 1))); }
+  72%  { transform: scale(calc(1 - 0.014 * var(--mv-amp, 1))); }
+  100% { transform: scale(1); }
+}
+.music-orb-press.is-release { animation: musicOrbRelease 0.44s cubic-bezier(0.22, 1, 0.36, 1); }
+
+/* 拖拽拉伸层：沿拖动方向拉伸、垂直方向收窄（等比保体积，像软球被拖着走）
+   transform 组合 rotate(θ) scale rotate(-θ)：拉伸轴随手指方向旋转，内容不歪。
+   ⚠️ 拖拽期间 transition: none —— 跟手不能有延迟；松手才走回弹过渡。 */
+.music-orb-stretch {
+  position: absolute;
+  inset: 0;
+  transform: rotate(var(--fab-rot, 0deg)) scale(var(--fab-sx, 1), var(--fab-sy, 1))
+    rotate(calc(-1 * var(--fab-rot, 0deg)));
+  transition: transform 0.4s cubic-bezier(0.22, 1.3, 0.36, 1);
+}
+.music-fab-ball.is-drag .music-orb-stretch { transition: none; }
+
+/* 球体本体：流体渐变 + 高光 + 半透明层次（一层一个职责）
+   border-radius 的"形变"（圆 → 圆角胶囊）放在这里：只影响绘制，不抢 transform 层 */
+.music-orb {
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #FFFFFF;
+  box-shadow: 0 6px 18px rgba(31, 45, 61, 0.24);
+  /* 轮廓随律动脉冲极轻微变化（幅度上限 3%，克制）；border-radius 承担展开形变 */
+  transform: scale(calc(1 + var(--mv-pulse, 0) * 0.03 * var(--mv-amp, 1)));
+  transition: border-radius 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.music-orb.is-expanded { border-radius: 34%; }
+
+/* 流动渐变：conic-gradient 缓慢自转 + 反向高光雾，叠出"内部色彩在流动"的观感
+   （不用 filter: blur —— 模糊图层持续运行是重灾区；靠大跨度的柔和渐变过渡代替）
+   切歌时主色走 background 过渡（同结构渐变 Blink 可插值）→ 颜色连续不跳。 */
+@keyframes musicOrbFlow { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+@keyframes musicOrbHaze { from { transform: rotate(0deg); } to { transform: rotate(-360deg); } }
+.music-orb-flow,
+.music-orb-haze {
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  transform-origin: 50% 50%;
+}
+.music-orb-flow {
+  background: conic-gradient(
+    from 20deg,
+    var(--mo-a, #DCEAF5) 0deg,
+    var(--mo-b, #B5D4F4) 78deg,
+    var(--mo-glow, #85B7EB) 168deg,
+    var(--mo-a, #DCEAF5) 248deg,
+    var(--mo-b, #B5D4F4) 318deg,
+    var(--mo-a, #DCEAF5) 360deg
+  );
+  opacity: 0.94;
+  animation: musicOrbFlow var(--mv-flow-dur, 26s) linear infinite;
+  transition: background 1s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.music-orb-haze {
+  background: radial-gradient(circle at 34% 26%, rgba(255, 255, 255, 0.78) 0%, rgba(255, 255, 255, 0) 48%);
+  animation: musicOrbHaze calc(var(--mv-flow-dur, 26s) * 1.7) linear infinite;
+}
+
+/* 封面层：形态切换只改 inset（唱片=铺满 / 流体球=缩小留出流光 / 玻璃球=略缩） */
+.music-orb-cover {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  overflow: hidden;
+  transition: inset 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.music-orb.is-orb .music-orb-cover { inset: 17%; }
+.music-orb.is-glass .music-orb-cover { inset: 9%; }
+
+/* 高光层：细腻的高光 + 半透明层次（固定在球体之上，给"玻璃质感"） */
+.music-orb-spec {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 30% 23%, rgba(255, 255, 255, 0.42) 0%, rgba(255, 255, 255, 0) 44%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0) 52%, rgba(255, 255, 255, 0.1) 100%);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.5);
+}
+
+/* 展开时球体自然"让位"给面板（形变 + 缩一点），而不是两个无关组件硬切 */
+.music-fab-ball.is-expanded .music-orb-cover { inset: 26%; }
+
+/* 共享元素形变层：一块玻璃胶囊从球的尺寸长成面板的尺寸。
+   只用 transform / opacity；刻意不加 backdrop-filter —— 面板那层模糊已经够，
+   再叠一层持续运行的模糊是性能重灾区。 */
+.music-fab-morph {
+  border-radius: 999px;
+  background: linear-gradient(165deg, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0.58) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  box-shadow: 0 6px 20px rgba(27, 30, 35, 0.1);
+  transition: transform 0.36s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.26s ease;
+}
+[data-theme='dark'] .music-fab-morph {
+  background: linear-gradient(165deg, rgba(52, 60, 68, 0.92) 0%, rgba(38, 45, 52, 0.72) 100%);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+/* 暂停时球体内部色彩"停住"（幅度只有 ~1.6px/s，不会被看成瞬间冻结），
+   同时把流动层压暗一点 —— 观感上像"慢下来并安顿好"，而不是空转。
+   ⚠️ 不加 animation-duration 过渡：改 duration 会让动画进度重映射 → 反而跳。 */
+.music-orb-flow,
+.music-orb-haze { transition: opacity 1.1s ease; }
+.music-orb-flow.is-paused,
+.music-orb-haze.is-paused { animation-play-state: paused; }
+.music-orb-flow.is-paused { opacity: 0.6; }
+.music-orb-haze.is-paused { opacity: 0.5; }
+
+/* ── 7. 动效总开关关闭时（html[data-mv-off='1']）：全站音乐动效静态化 ──
+   用一个根属性而不是逐组件判断，理由与深色模式同一套：
+   改一处就能覆盖播放页与全局悬浮球两处。 */
+html[data-mv-off='1'] .music-breathe,
+html[data-mv-off='1'] .music-orb-flow,
+html[data-mv-off='1'] .music-orb-haze,
+html[data-mv-off='1'] .music-spectrum,
+html[data-mv-off='1'] .music-btn-ripple,
+html[data-mv-off='1'] .music-cover-swap,
+html[data-mv-off='1'] .music-fab-panel { animation: none; }
+html[data-mv-off='1'] .music-pulse { transform: none; }
+html[data-mv-off='1'] .music-orb-glow { opacity: 0.3; transform: none; }
+html[data-mv-off='1'] .music-orb { transform: none; }
+html[data-mv-off='1'] .music-orb-stretch { transition: none; }
+
+
+/* ── 7. 动效设置里的滑块（沿用全站浅色玻璃调性） ── */
+.music-fx-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  /* 轨道视觉高度仍是 4px，但命中区扩到 28px：
+     4px 的可点区域在手机上几乎拖不住（这是交互可用性问题，不是视觉问题） */
+  height: 28px;
+  background: transparent;
+  outline: none;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+.music-fx-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 177, 196, 0.32);
+}
+.music-fx-range::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(148, 177, 196, 0.32);
+}
+.music-fx-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  margin-top: -5.5px; /* (15 - 4) / 2 → 让拇指在轨道上垂直居中 */
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #6FA3C9;
+  box-shadow: 0 1px 5px rgba(31, 45, 61, 0.22);
+  cursor: pointer;
+}
+.music-fx-range::-moz-range-thumb {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 2px solid #6FA3C9;
+  box-shadow: 0 1px 5px rgba(31, 45, 61, 0.22);
+  cursor: pointer;
+}
+.music-fx-range:focus-visible {
+  outline: 2px solid rgba(111, 163, 201, 0.55);
+  outline-offset: 4px;
+  border-radius: 999px;
+}
+
+/* ── 8. 减少动态效果：全部降级为静态（保留配色与层次，去掉一切运动） ── */
+@media (prefers-reduced-motion: reduce) {
+  .music-breathe,
+  .music-cover-swap,
+  .music-orb-press.is-release { animation: none; }
+  .music-pulse { transform: none; }
+  .music-spectrum { display: none; }
+  .music-orb-flow,
+  .music-orb-haze,
+  .music-btn-ripple { animation: none; }
+  .music-orb-glow { opacity: calc(0.34 * var(--mv-glow, 1)); transform: none; }
+  .music-orb { transform: none; }
+  .music-orb-stretch { transition: none; }
+  .music-orb,
+  .music-orb-cover { transition: none; }
+}
+
 /* ============================================================
    布局壳
    ============================================================ */
@@ -485,6 +1076,23 @@ body::before {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
+}
+
+/* ============================================================
+   主题商店皮肤的背景层（#ndt-skin-bg）
+   由 src/themeStore.ts 在应用主题时创建、挂到 body 上：
+     - 固定铺满整个视口，背景图 cover + 居中 → 裁剪而不拉伸，任何屏幕比例都不变形
+     - z-index:-1 → 压在所有内容之下、body 背景之上（登录/注册页与登录后界面都生效）
+   配色与蒙版由 JS 写在行内 style 上，这里只固定几何与层级。
+   ============================================================ */
+#ndt-skin-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-size: cover, cover;
+  background-position: center center, center center;
+  background-repeat: no-repeat, no-repeat;
 }
 
 /* ============================================================
@@ -513,6 +1121,185 @@ body::before {
   50%      { opacity: 0.72; transform: translateY(-0.5px); }
 }
 .flame-flicker { animation: flameFlicker 3.2s ease-in-out infinite; }
+
+/* ============================================================
+   AI 智能助手面板（题目 AI 解析 / 视频 AI 概括）
+   用法：src/components/AiAnswerCard.tsx 组装，PracticeScreen / VideoDetailScreen 调用
+   约定：只引用 var(--token)，深色模式靠令牌自动适配（不在这里写死颜色）
+   ============================================================ */
+
+/* 卡片：在主色方向上做极淡的斜向渐变底，和普通 .card 区分开 */
+.ai-card {
+  position: relative;
+  border-radius: 18px;
+  padding: 16px;
+  background:
+    linear-gradient(150deg, var(--accent-weak) 0%, transparent 46%),
+    var(--glass-bg);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
+  border: 1px solid var(--accent-border);
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+}
+
+/* 卡片右上角的柔光，暗示「这是 AI 生成的」 */
+.ai-card::after {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -30px;
+  width: 140px;
+  height: 140px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: radial-gradient(circle, var(--accent-weak) 0%, transparent 68%);
+}
+
+/* 图标徽章：主色渐变方块 */
+.ai-badge {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--on-accent);
+  background: linear-gradient(140deg, var(--accent), var(--accent-fill));
+  box-shadow: 0 4px 12px var(--accent-weak);
+}
+
+/* 小标签（模型名 / 缓存标记） */
+.ai-chip {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.02em;
+  background: var(--chip-bg-soft);
+  border: 1px solid var(--chip-border);
+  color: var(--text-3);
+  white-space: nowrap;
+}
+
+/* 行动按钮：主色渐变实心 + 轻微上浮 */
+.ai-action {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--on-accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-fill));
+  box-shadow: 0 6px 16px var(--accent-weak);
+  transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.ai-action:active { transform: scale(0.985); opacity: 0.92; }
+.ai-action:disabled { opacity: 0.55; cursor: default; }
+
+/* 次级小按钮（重新生成 / 复制） */
+.ai-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 11px;
+  border-radius: 999px;
+  color: var(--text-2);
+  background: var(--chip-bg);
+  border: 1px solid var(--chip-border);
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform 0.1s ease, opacity 0.1s ease;
+}
+.ai-ghost:active { transform: scale(0.96); opacity: 0.86; }
+
+/* 思考中的骨架行（复用 .skeleton 的 shimmer 动画） */
+.ai-skeleton-line {
+  height: 10px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--track) 25%, var(--field-bg) 50%, var(--track) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+
+/* 流式输出时的光标：跟在最后一个字后面一闪一闪 */
+.ai-caret {
+  display: inline-block;
+  width: 2px;
+  height: 0.95em;
+  margin-left: 2px;
+  vertical-align: -0.14em;
+  border-radius: 1px;
+  background: var(--accent);
+  animation: aiCaret 1s steps(2, start) infinite;
+}
+@keyframes aiCaret { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
+
+/* 流式进行中：在 Markdown 最后一段的行尾挂一个闪烁方块光标 */
+.ai-streaming > *:last-child::after {
+  content: '▍';
+  color: var(--accent);
+  margin-left: 1px;
+  animation: aiCaret 1s steps(2, start) infinite;
+}
+
+/* 「AI 正在思考」三个点 */
+.ai-thinking-dot { animation: dotPulse 1.2s ease-in-out infinite; }
+.ai-thinking-dot:nth-child(2) { animation-delay: 0.2s; }
+.ai-thinking-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* 错误态：低饱和红底 */
+.ai-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.6;
+  padding: 10px 12px;
+  border-radius: 12px;
+  color: var(--err);
+  background: var(--err-weak);
+  border: 1px solid var(--err-border);
+}
+
+/* ── AI 讲解里的 LaTeX 公式（v1.86，KaTeX）────────────────────
+   颜色走 currentColor（KaTeX 默认继承），深色模式自动跟随令牌；
+   字号略压到 1.08em（KaTeX 默认 1.21em，在小卡片里偏大）；
+   块级公式横向可滑，超长推导（分式叠代、多步代入）不会把卡片撑爆。 */
+.md-katex .katex,
+.md-katex-display .katex { font-size: 1.08em; }
+
+.md-katex-display {
+  margin: 6px 0;
+  padding: 2px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+.md-katex-display .katex-display { margin: 0; }
+.md-katex-display::-webkit-scrollbar { height: 3px; }
+.md-katex-display::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 999px; }
+
+/* 已生成提示（缓存标记） */
+.ai-cached {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-3);
+}
 
 /* ============================================================
    深色模式（html[data-theme='dark']）
@@ -670,7 +1457,9 @@ body::before {
 [data-theme='dark'] .border-slate-200,
 [data-theme='dark'] .border-slate-300 { border-color: var(--line); }
 /* 主色文字（登录页 segmented 选中态等）在深色下提亮，保证对比度 */
-[data-theme='dark'] .text-emerald-600 { color: #34D399; }
+/* 深色下链接绿要比浅色模式亮一档。默认仍是 #34D399（外观零变化）；
+   应用「主题商店」皮肤时 themeStore 会写入 --emerald-600-text，让链接跟着主题主色走。 */
+[data-theme='dark'] .text-emerald-600 { color: var(--emerald-600-text, #34D399); }
 /* 深色下阴影减弱，避免瓦楞感 */
 [data-theme='dark'] .shadow-slate-200\/60 { --tw-shadow-color: rgba(0,0,0,0.45); }
 
@@ -703,3 +1492,31 @@ html[data-theme] .gb-pill {
 /* docx 预览段落间距（docx-preview 输出的 section/div） */
 .docx-preview-host p { margin: 0.4em 0; }
 
+/* ============================================================
+   题目插图固定区（RichText.tsx 的 .rt-img-area，v1.34）
+   一段文字里的所有图片收进同一个固定高度的区域：
+   每张图固定占位、等比缩放（objectFit contain，不裁剪都看得到），
+   右侧滚动条常驻 —— 全站把滚动条藏掉了（::-webkit-scrollbar display:none），
+   这里必须显式开回来，否则「一直要在」的滑动条会被全局规则吃掉。
+   后台同口径样式在 server/static/style.css 的 .rt-img-area，改一边同步另一边。
+   ============================================================ */
+.rt-img-area {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  margin: 6px 0;
+  overflow-y: scroll;                       /* 滚动条常驻，内容不满也显示轨道 */
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-warm);
+  scrollbar-width: thin;                    /* Firefox */
+  scrollbar-color: var(--line-strong) transparent;
+}
+.rt-img-area::-webkit-scrollbar { display: block; width: 8px; }
+.rt-img-area::-webkit-scrollbar-track { background: transparent; }
+.rt-img-area::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+.rt-img-area::-webkit-scrollbar-thumb:hover { background: var(--text-3); }

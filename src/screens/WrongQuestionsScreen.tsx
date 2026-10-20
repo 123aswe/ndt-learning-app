@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { statsApi, type WrongQuestionItem } from '../api/client'
 import { QuestionReportSheet } from '../components/QuestionReportSheet'
+import { AiExplainToggle } from '../components/AiExplainToggle'
+import { RichText } from '../components/RichText'
+import { stripRichText } from '../data/richText'
 import { ChevronRightIcon, ChevronLeftIcon, CheckIcon, XIcon, RefreshIcon, CheckCircleIcon, TrashIcon, FlagIcon } from '../components/icons'
 
 /* ============================================================
@@ -100,7 +103,7 @@ export function WrongQuestionsScreen({ onStartPractice, onBack }: WrongQuestions
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 110 }}>
+      <div className="ui-stagger" style={{ paddingBottom: 110 }}>
         {/* 标题（带返回按钮：回到「我的」页） */}
         <div className="px-5 pt-14 pb-4">
           <div className="flex items-center gap-3 mb-1">
@@ -215,7 +218,7 @@ export function WrongQuestionsScreen({ onStartPractice, onBack }: WrongQuestions
                           <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{record.topic}</span>
                         </div>
 
-                        <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-2)' }}>{record.content}</p>
+                        <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-2)' }}>{stripRichText(record.content)}</p>
                       </div>
 
                       <div
@@ -262,10 +265,13 @@ export function WrongQuestionsScreen({ onStartPractice, onBack }: WrongQuestions
                         <div className="rounded-xl px-3 py-2.5 flex items-start gap-2" style={{ background: 'var(--ok-weak)', border: '1px solid var(--ok-border)' }}>
                           <span className="font-bold text-sm" style={{ color: 'var(--ok)' }}>{record.answer}.</span>
                           <span className="text-xs leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                            {correctOption?.text}
+                            <RichText text={correctOption?.text} />
                           </span>
                         </div>
                       </div>
+
+                      {/* AI 解析：点开才发请求（列表页懒加载，见 AiExplainToggle） */}
+                      <AiExplainToggle questionId={record.id} className="mb-4" />
 
                       {/* 操作：再练一次 / 标记已掌握 / 删除（两步确认） */}
                       <div className="flex gap-2 mt-3">

@@ -74,7 +74,7 @@ export function ScoreRecordsScreen({ onBack, onStartPractice, onOpenDetail }: Sc
 
   return (
     <div className="scroll-area bg-page">
-      <div style={{ paddingBottom: 110 }}>
+      <div className="ui-stagger" style={{ paddingBottom: 110 }}>
         {/* 顶栏 */}
         <div className="px-5 pt-14 pb-4 flex items-center gap-3">
           <button

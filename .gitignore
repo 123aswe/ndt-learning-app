@@ -20,14 +20,33 @@ logs/
 /.plugins/
 /.opencode-skills/
 
+# ── 内网穿透（tools/，Cloudflare 快速隧道）──────────────────
+# cloudflared 是 52MB 的客户端二进制，按需下载，别进仓库
+tools/cloudflared.exe
+tools/*.download
+# SakuraFrp 版脚本备份（含访问密钥）也不进仓库
+tools/sakurafrp.json
+tools/*.bak
+# 隧道地址属于运行期产物
+公网地址.txt
+
 # ── Python 服务（server/）──────────────────────────────────
 # config.json 含腾讯云短信密钥，绝不能提交
 server/config.json
-# 本地数据库
-server/data/
+# 本地数据库与上传文件（uploads 含用户上传资料/音乐）
+server/data/*
+# 例外：内置一级题库随仓库分发（首次启动自动导入，开箱即用）
+!server/data/question_bank.csv
 # 虚拟环境与 Python 缓存
 server/.venv/
 server/.deps_ok
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+# ── SSL 证书与私钥（本机 HTTPS 部署用，绝不能提交）──────────
+*.crt
+*.key
+
+# ── 微信开发者工具私有配置（个人本地偏好，不提交）──────────
+miniprogram/project.private.config.json

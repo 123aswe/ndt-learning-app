@@ -23,6 +23,12 @@
     return;
   }
 
+  // 返回登录注册界面：直接回考生端登录/注册页（/app/）。
+  // 未登录时 App 启动即停在「登录 / 注册」屏，所以不做历史回退，保证一定落到登录注册界面。
+  document.getElementById('back-btn').addEventListener('click', function () {
+    location.href = '/app/';
+  });
+
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
     hideError();

@@ -20,6 +20,7 @@ from pydantic import BaseModel, Field
 
 from database import get_conn, row_to_dict
 from deps import USER, get_current_user
+from modules import realtime
 from security import hash_password, verify_password
 
 router = APIRouter(prefix="/api/user", tags=["考生账号安全"])
@@ -68,6 +69,9 @@ def change_my_password(body: ChangeMyPasswordBody, user: dict = Depends(get_curr
         conn.execute(
             "DELETE FROM sessions WHERE subject_type = ? AND subject_id = ?", (USER, user["id"])
         )
+
+    # 实时踢下线：其它设备（另一部手机 / 另一个标签页）不用等下次请求就退回登录页
+    realtime.kick_session(user["id"], "密码已修改，请用新密码重新登录")
 
     return {"ok": True, "message": "密码已修改，请用新密码重新登录"}
 

@@ -1,0 +1,87 @@
+<!--
+  三态，任何时候都不会出现"白屏"：
+    loading → 小程序原生的「正在连接」界面
+    ok      → 只渲染 web-view，界面 100% 由里面的 H5 提供（与 App 完全一致）
+    fail    → web-view 卸载，显示原生兜底页
+-->
+
+<!-- ① 连接中 -->
+<view wx:if="{{state === 'loading'}}" class="ld-wrap">
+  <view class="ld-spinner"></view>
+  <view class="ld-text">正在连接服务器…</view>
+  <view wx:if="{{appUrl}}" class="ld-url">{{appUrl}}</view>
+</view>
+
+<!-- ② 正常态 -->
+<web-view
+  wx:if="{{state === 'ok'}}"
+  src="{{url}}"
+  bindload="onWebLoad"
+  binderror="onWebError"
+></web-view>
+
+<!-- ③ 失败态 -->
+<view wx:if="{{state === 'fail'}}" class="fb-wrap">
+  <view class="fb-icon">!</view>
+  <view class="fb-title">{{errTitle}}</view>
+  <view class="fb-desc">{{errDesc}}</view>
+
+  <!--
+    被「域名校验」拦下时：给出免费、立刻可用的一条路。
+    工具里正常、真机 / PC 预览空白，绝大多数就是这种情况。
+  -->
+  <view wx:if="{{errBlocked}}" class="fb-warn">
+    <view class="fb-warn-t">想在手机 / PC 上立刻看到界面？</view>
+    <view class="fb-warn-d">
+      点下面「开启调试模式」并等小程序自动重启 —— 域名校验会临时放开
+      （仅开发版 / 体验版有效；正式发布必须配置 HTTPS 业务域名）。
+      也可改用工具栏的「真机调试」而不是「预览」。
+    </view>
+    <button class="fb-btn fb-btn-warn" bindtap="onEnableDebug">开启调试模式</button>
+  </view>
+
+  <view wx:if="{{appUrl}}" class="fb-url">{{appUrl}}</view>
+
+  <!-- 后端报过的可用地址（= 管理后台「网络访问」卡片里的三条），点一下直接切换 -->
+  <block wx:if="{{suggestions.length}}">
+    <view class="fb-sub">换个地址试试</view>
+    <view class="fb-chips">
+      <view
+        wx:for="{{suggestions}}"
+        wx:key="url"
+        class="fb-chip"
+        data-url="{{item.url}}"
+        bindtap="onPickServer"
+      >{{item.label}}</view>
+    </view>
+  </block>
+
+  <view class="fb-actions">
+    <button class="fb-btn fb-btn-primary" bindtap="onRetry">重新连接</button>
+    <button class="fb-btn fb-btn-ghost" bindtap="onAutoDetect">自动探测服务器</button>
+    <button class="fb-btn fb-btn-ghost" bindtap="onEditServer">修改服务器地址</button>
+    <button wx:if="{{custom}}" class="fb-btn fb-btn-ghost" bindtap="onResetServer">
+      恢复自动探测
+    </button>
+    <button wx:if="{{appUrl}}" class="fb-btn fb-btn-ghost" bindtap="onCopyUrl">复制地址</button>
+  </view>
+
+  <!-- 诊断信息：截图 / 复制发给开发者即可定位 -->
+  <view class="fb-diag">
+    <view class="fb-diag-head">
+      <text class="fb-diag-title">诊断信息</text>
+      <text class="fb-diag-copy" bindtap="onCopyDiag">复制</text>
+    </view>
+    <view wx:for="{{diag}}" wx:key="k" class="fb-diag-row">
+      <text class="fb-diag-k">{{item.k}}</text>
+      <text class="fb-diag-v">{{item.v}}</text>
+    </view>
+  </view>
+
+  <view class="fb-tip">
+    1. 本机开发：确认后端已启动（server / 启动服务.bat），工具里勾选「不校验合法域名」
+    2. 手机 / PC 预览：手机与电脑连同一 WiFi，打开后端「网络访问 → 局域网」开关，
+       并在手机上开启调试模式（或改用工具栏「真机调试」）
+    3. 地址会自动探测（跟随管理后台「网络访问」卡片）；真机首次若不通用「修改服务器地址」填一次
+  </view>
+</view>

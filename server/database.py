@@ -24,7 +24,16 @@
   question_reports 题目纠错工单（考生上报「答案疑似有误」→ 管理员采纳/忽略）
   exams           模拟考试（一次开卷一行，id 同时是 answer_records.session_id）
   exam_answers    考试作答明细（交卷时写入，试卷回看数据源）
+  material_series 资料系列（大类下面再分一层系列，如「UT 培训视频合集」）
   materials       资料库（标准/教材/资料/视频的元数据；文件字节存 data/uploads/）
+  music_tracks    音乐（管理员上传的音频 + 封面 + 歌词；音频字节存 data/uploads/）
+  music_albums    音乐专辑（后台创建，歌曲通过 music_tracks.album_id 归入；删专辑不删歌）
+  music_plays     音乐播放记录（「我的 → 观看历史」的音乐条目，hidden 隐藏标记）
+  music_favorites 音乐收藏；music_comments 音乐评论
+  themes          主题商店（管理员上传的皮肤：背景图 + 主色 / 辅色 / 字色 + 预览图）
+  ai_question_explain  AI 题目解析缓存（一道题只生成一次，Markdown）
+  ai_question_solution AI 计算题解答过程缓存（题库没配讲解时兜底，一道题只生成一次）
+  ai_video_summary     AI 视频概括缓存（一个视频只生成一次，Markdown）
   app_meta        系统元信息（key-value）：一次性任务的执行标记
 
 修改注意：
@@ -153,7 +162,9 @@ CREATE TABLE IF NOT EXISTS notifications (
   created_at TEXT    NOT NULL
 );
 
--- 通知批次：后台「已发送记录」列表读这张表；删批次不影响考生已收到的通知
+-- 通知批次：后台「已发送记录」列表读这张表
+-- hidden = 1 表示管理员在后台删掉了这次发送；考生端对应的通知也会一起删
+-- （旧版本只隐藏后台记录、考生端保留，历史残留由 _backfill_notify_hidden_batches 抹平）
 CREATE TABLE IF NOT EXISTS notification_batches (
   id             TEXT    PRIMARY KEY,           -- nb + 16 位十六进制
   type           TEXT    NOT NULL DEFAULT 'notice',
@@ -164,7 +175,7 @@ CREATE TABLE IF NOT EXISTS notification_batches (
   accounts       TEXT    NOT NULL DEFAULT '',   -- 接收账号快照（逗号分隔）
   receiver_count INTEGER NOT NULL DEFAULT 0,
   sender         TEXT    NOT NULL DEFAULT '',
-  hidden         INTEGER NOT NULL DEFAULT 0,    -- 后台删除记录 = 置 1（考生端保留）
+  hidden         INTEGER NOT NULL DEFAULT 0,    -- 管理员删除 = 置 1（后台不再显示 + 考生端一并移除）
   created_at     TEXT    NOT NULL
 );
 
@@ -186,6 +197,7 @@ CREATE TABLE IF NOT EXISTS password_resets (
 CREATE TABLE IF NOT EXISTS questions (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   set_id       INTEGER,                            -- NULL = 内置一级题库；非空 = 自定义题库 question_sets.id
+  chapter_id   INTEGER,                            -- 所属题库章节 question_chapters.id（NULL = 未归章节）
   method       TEXT    NOT NULL,                   -- UT / RT / MT / PT；自定义题库统一 'ZD'
   grade        TEXT    NOT NULL DEFAULT 'I',       -- 级别（内置题库均为一级）
   topic1       TEXT    NOT NULL DEFAULT '',        -- 知识点一（章）
@@ -193,7 +205,8 @@ CREATE TABLE IF NOT EXISTS questions (
   qtype        TEXT    NOT NULL DEFAULT 'single',  -- single 单选 / judge 判断 / calc 计算 / short 简答
   content      TEXT    NOT NULL,                   -- 题干
   options_json TEXT    NOT NULL,                   -- 选项 JSON：[{"key":"A","text":"..."},...]（简答可为 []）
-  answer       TEXT    NOT NULL,                   -- 正确答案：选项字母 / 判断（对错字母）/ 简答参考答案
+  answer       TEXT    NOT NULL,                   -- 正确答案：选项字母 / 判断（对错字母）/ 简答参考答案 / 计算题标准答案
+  explanation  TEXT    NOT NULL DEFAULT '',        -- 「题目原题讲解」= 解答过程（管理员填写，可含插图标记 [[img:qimg_xx.png]]）
   source_no    INTEGER NOT NULL DEFAULT 0,         -- 原始 CSV 序号（追溯用）
   created_at   TEXT    NOT NULL
 );
@@ -203,7 +216,37 @@ CREATE TABLE IF NOT EXISTS question_sets (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT    NOT NULL UNIQUE,          -- 题库名称（考生端展示）
   level       TEXT    NOT NULL DEFAULT '',      -- 级别：一级 / 二级 / 三级 / 自定义文本
+  method      TEXT    NOT NULL DEFAULT '',      -- 方向/类型：'' 通用 / UT / RT / MT / PT / ET / VT / 综合（后台题库列表筛选）
   description TEXT    NOT NULL DEFAULT '',      -- 描述（考生端副标题）
+  series_id   INTEGER,                          -- 所属题库系列 question_set_series.id（NULL = 散题库）
+  cover_name  TEXT    NOT NULL DEFAULT '',      -- 题库封面磁盘随机文件名（'' = 考生端用图标水印）
+  sort_order  INTEGER NOT NULL DEFAULT 0,       -- 管理端上移/下移排定的顺序（0 = 未排过按 id 倒序兜底）
+  created_at  TEXT    NOT NULL
+);
+
+-- 题库系列（v30）：题库页最外一层分组（如「二级 UT 题库系列」），系列下面挂多个题库
+--   删系列不删题库：代码把 question_sets.series_id 置 NULL，题库退回「其他题库」
+CREATE TABLE IF NOT EXISTS question_set_series (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT    NOT NULL UNIQUE,          -- 系列名（考生端展示）
+  level       TEXT    NOT NULL DEFAULT '',      -- 级别：一级 / 二级 / 自定义文本（题库页分类筛选用）
+  method      TEXT    NOT NULL DEFAULT '',      -- 方向：'' 通用 / UT / RT / MT / PT / ET / VT / 综合
+  description TEXT    NOT NULL DEFAULT '',      -- 简介（考生端副标题）
+  cover_name  TEXT    NOT NULL DEFAULT '',      -- 系列封面磁盘随机文件名（'' = 考生端图标水印）
+  sort_order  INTEGER NOT NULL DEFAULT 0,       -- 管理端排定的顺序
+  created_by  TEXT    NOT NULL DEFAULT '',      -- 创建的管理员用户名
+  created_at  TEXT    NOT NULL
+);
+
+-- 题库章节（v30）：题库下面的章节（如「第 1 章 概述」），CSV 按章节导入
+--   题目通过 questions.chapter_id 归属章节，同时把章节名冗余写进 topic1（考生端按章节练习/统计沿用老口径）
+--   删章节不删题目：代码把 questions.chapter_id 置 NULL、topic1 清空，题目退回「未归章节」
+CREATE TABLE IF NOT EXISTS question_chapters (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  set_id      INTEGER NOT NULL,                 -- 所属题库 question_sets.id
+  name        TEXT    NOT NULL,                 -- 章节名（同一题库内唯一，由代码校验）
+  description TEXT    NOT NULL DEFAULT '',      -- 章节说明（选填）
+  sort_order  INTEGER NOT NULL DEFAULT 0,       -- 管理端排定的顺序（章节默认按添加顺序，越小越前）
   created_at  TEXT    NOT NULL
 );
 
@@ -292,6 +335,20 @@ CREATE TABLE IF NOT EXISTS question_reports (
   created_at       TEXT    NOT NULL
 );
 
+-- 资料系列：在「大类（标准规范 / 教材 / 辅导资料 / 视频课程）」下面再分一层系列，
+-- 例如「UT 二级培训视频」「2024 版标准合辑」。考生端先看系列卡片，点进去才是系列内的资料列表。
+CREATE TABLE IF NOT EXISTS material_series (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT    NOT NULL,                     -- 系列名（考生端系列卡标题）
+  category    TEXT    NOT NULL,                     -- 所属大类（口径同 materials.category）
+  method      TEXT    NOT NULL DEFAULT '',          -- 适用方向：'' 通用 / UT / RT / MT / PT / ET / VT / 综合
+  description TEXT    NOT NULL DEFAULT '',          -- 系列简介（考生端系列卡副标题）
+  cover_name  TEXT    NOT NULL DEFAULT '',          -- 系列封面磁盘随机文件名（'' = 无封面，考生端用图标水印）
+  created_by  TEXT    NOT NULL DEFAULT '',          -- 创建的管理员用户名
+  sort_order  INTEGER NOT NULL DEFAULT 0,           -- 管理端「上移/下移」排定的顺序（越大越靠前；考生端列表与大类页都按它倒序）
+  created_at  TEXT    NOT NULL
+);
+
 -- 资料库：管理员上传的标准 / 教材 / 辅导资料 / 视频课程（考生端「教材 / 视频」页读取）。
 -- 元数据入库；文件字节存 server/data/uploads/（视频太大，塞 SQLite 会让库变慢）
 CREATE TABLE IF NOT EXISTS materials (
@@ -301,11 +358,48 @@ CREATE TABLE IF NOT EXISTS materials (
   method      TEXT    NOT NULL DEFAULT '',          -- '' 通用 / UT / RT / MT / PT / ET / VT / 综合
   description TEXT    NOT NULL DEFAULT '',          -- 描述（考生端副标题）
   kind        TEXT    NOT NULL DEFAULT 'doc',       -- pdf / video / doc（决定考生端用什么方式打开）
+  series_id   INTEGER,                              -- 所属系列 id（NULL = 散资料，考生端归到「未归系列」）
   file_name   TEXT    NOT NULL DEFAULT '',          -- 上传时的原始文件名（下载/展示用）
   stored_name TEXT    NOT NULL,                     -- 磁盘随机文件名（uploads/ 下的实际文件）
   cover_name  TEXT    NOT NULL DEFAULT '',          -- 管理员指定封面的磁盘随机文件名（'' = 未指定，考生端自动取视频首帧）
   file_size   INTEGER NOT NULL DEFAULT 0,           -- 字节数
   mime        TEXT    NOT NULL DEFAULT '',          -- MIME 类型（FileResponse 用）
+  uploaded_by TEXT    NOT NULL DEFAULT '',          -- 上传的管理员用户名
+  sort_order  INTEGER NOT NULL DEFAULT 0,           -- 管理端「上移/下移」排定的顺序（越大越靠前；新上传取当前最大值 +1）
+  created_at  TEXT    NOT NULL
+);
+
+-- 音乐专辑：管理员在后台「音乐 → 专辑管理」创建，再把歌曲归入（music_tracks.album_id 指向本表）。
+-- 考生端音乐首页顶部「专辑」Tab 展示专辑卡片，点进专辑看该专辑的歌曲。
+-- 删专辑不删歌：代码把 music_tracks.album_id 置 NULL，歌曲退回「未归专辑」。
+CREATE TABLE IF NOT EXISTS music_albums (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  name        TEXT    NOT NULL,                     -- 专辑名（考生端展示）
+  description TEXT    NOT NULL DEFAULT '',          -- 专辑简介（选填）
+  cover_name  TEXT    NOT NULL DEFAULT '',          -- 专辑封面磁盘随机文件名（'' = 考生端用专辑内首曲封面 / 内置插画）
+  sort_order  INTEGER NOT NULL DEFAULT 0,           -- 管理端排定的顺序（越大越靠前）
+  uploaded_by TEXT    NOT NULL DEFAULT '',          -- 创建的管理员用户名
+  created_at  TEXT    NOT NULL
+);
+
+-- 音乐：管理员在后台「音乐」页上传的曲目（歌名 / 歌手 / 专辑 / 歌词 / 音频文件 / 封面）。
+-- 元数据入库，音频与封面字节存 server/data/uploads/（同资料库口径，大文件不进 SQLite）。
+-- 考生端「音乐」页按 sort_order 倒序取列表，用 <audio> 播 /api/music/{id}/file。
+CREATE TABLE IF NOT EXISTS music_tracks (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  title       TEXT    NOT NULL,                     -- 歌名
+  artist      TEXT    NOT NULL DEFAULT '',          -- 歌手
+  album       TEXT    NOT NULL DEFAULT '',          -- 专辑名（选填，老字段；展示优先用 album_id 指向的专辑）
+  album_id    INTEGER,                              -- 所属专辑 music_albums.id（NULL = 未归专辑）
+  lyric       TEXT    NOT NULL DEFAULT '',          -- 歌词：纯文本，或带 [mm:ss.xx] 时间轴的 LRC（考生端逐行高亮）
+  duration    INTEGER NOT NULL DEFAULT 0,           -- 时长（秒；0 = 未知，考生端按音频实际时长显示）
+  file_name   TEXT    NOT NULL DEFAULT '',          -- 上传时的原始文件名
+  stored_name TEXT    NOT NULL,                     -- 音频在 uploads/ 下的磁盘随机文件名
+  mime        TEXT    NOT NULL DEFAULT '',          -- MIME 类型（FileResponse 用）
+  file_size   INTEGER NOT NULL DEFAULT 0,           -- 字节数
+  cover_name  TEXT    NOT NULL DEFAULT '',          -- 封面磁盘随机文件名（'' = 考生端回落内置山水插画）
+  play_count  INTEGER NOT NULL DEFAULT 0,           -- 播放次数（考生端点播放时 +1）
+  sort_order  INTEGER NOT NULL DEFAULT 0,           -- 管理端「上移/下移」排定的顺序（越大越靠前）
   uploaded_by TEXT    NOT NULL DEFAULT '',          -- 上传的管理员用户名
   created_at  TEXT    NOT NULL
 );
@@ -338,10 +432,84 @@ CREATE TABLE IF NOT EXISTS material_comments (
   created_at  TEXT    NOT NULL
 );
 
+-- 音乐播放记录：考生每次点播落一条（B 站式口径，同 material_views）
+--   播放量仍以 music_tracks.play_count 累加计数；本表供「我的 → 观看历史」的音乐条目
+--   （最近播放时间 / 我听过几次 / 移除隐藏标记）
+CREATE TABLE IF NOT EXISTS music_plays (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  track_id   INTEGER NOT NULL,
+  user_id    INTEGER NOT NULL,
+  hidden     INTEGER NOT NULL DEFAULT 0,        -- 1 = 考生从「观看历史」移除了这条（只影响列表，不删行）
+  played_at  TEXT    NOT NULL
+);
+
+-- 音乐收藏：一个考生对一首歌最多一条（同 material_favorites 口径）
+CREATE TABLE IF NOT EXISTS music_favorites (
+  track_id   INTEGER NOT NULL,
+  user_id    INTEGER NOT NULL,
+  created_at TEXT    NOT NULL,
+  PRIMARY KEY (track_id, user_id)
+);
+
+-- 音乐评论：考生在播放页评论区发表（即时可见），可删自己的；管理员删歌时级联清
+CREATE TABLE IF NOT EXISTS music_comments (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  track_id   INTEGER NOT NULL,
+  user_id    INTEGER NOT NULL,
+  content    TEXT    NOT NULL,                  -- 1~300 字
+  created_at TEXT    NOT NULL
+);
+
+-- 主题商店：管理员上传的「皮肤」（背景图 + 主色 + 辅色 + 字色 + 预览图）。
+-- 考生端「我的 → 主题商店」自选一个应用：背景图 cover 铺满（不拉伸）、配色令牌覆盖，
+-- 登录/注册页与登录后的界面都生效；选择结果只存考生本机 localStorage（不入库），
+-- 因为登录/注册页在未登录时就要应用主题，必须能在拿到令牌之前读出来。
+-- 图片字节存 server/data/uploads/（theme_preview_* / theme_bg_*）。
+CREATE TABLE IF NOT EXISTS themes (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  name            TEXT    NOT NULL,                  -- 主题名称（考生端展示）
+  primary_color   TEXT    NOT NULL DEFAULT '',       -- 主色 #RRGGBB（按钮 / 强调 / 进度）
+  secondary_color TEXT    NOT NULL DEFAULT '',       -- 辅色 #RRGGBB（渐变终点）
+  text_tone       TEXT    NOT NULL DEFAULT 'dark',   -- 字色：'dark' 深色字（浅底）/ 'light' 浅色字（深底）
+  preview_name    TEXT    NOT NULL DEFAULT '',       -- 预览图磁盘随机文件名（'' = 考生端用配色渐变兜底）
+  background_name TEXT    NOT NULL DEFAULT '',       -- 背景图磁盘随机文件名（'' = 只用配色渐变背景）
+  sort_order      INTEGER NOT NULL DEFAULT 0,        -- 管理端「上移/下移」排定的顺序（越大越靠前）
+  created_by      TEXT    NOT NULL DEFAULT '',       -- 上传的管理员用户名
+  created_at      TEXT    NOT NULL
+);
+
 -- 系统元信息：一次性任务的执行标记等（key-value，避免重复跑破坏性/覆盖性操作）
 CREATE TABLE IF NOT EXISTS app_meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
+);
+
+-- AI 题目解析缓存（modules/ai.py）：一道题只让大模型答一次，之后所有人复用。
+-- content 是 Markdown 文本（前端 src/components/Markdown.tsx 渲染）。
+-- 想重新生成在考生端点「重新生成」（refresh=1）覆盖本行，或直接删掉本行。
+CREATE TABLE IF NOT EXISTS ai_question_explain (
+  question_id INTEGER PRIMARY KEY,              -- questions.id
+  content     TEXT    NOT NULL DEFAULT '',      -- 模型输出的 Markdown 解析
+  model       TEXT    NOT NULL DEFAULT '',      -- 生成时用的模型名（含版本，便于排查）
+  created_at  TEXT    NOT NULL
+);
+
+-- AI 计算题解答过程缓存（modules/ai.py）：题库里没配「解答过程」的计算题，
+-- 由大模型分步写出解答过程，落库后所有考生复用（全局共享，不按用户隔离）。
+CREATE TABLE IF NOT EXISTS ai_question_solution (
+  question_id INTEGER PRIMARY KEY,              -- questions.id
+  content     TEXT    NOT NULL DEFAULT '',      -- 模型输出的 Markdown 解答过程
+  model       TEXT    NOT NULL DEFAULT '',      -- 生成时用的模型名
+  created_at  TEXT    NOT NULL
+);
+
+-- AI 视频概括缓存（modules/ai.py）：一个视频只概括一次。
+-- 概括依据 = 视频标题/简介 + ffmpeg 均匀抽取的关键帧（视觉模型看图说话）。
+CREATE TABLE IF NOT EXISTS ai_video_summary (
+  material_id INTEGER PRIMARY KEY,              -- materials.id
+  content     TEXT    NOT NULL DEFAULT '',      -- 模型输出的 Markdown 概括
+  model       TEXT    NOT NULL DEFAULT '',      -- 生成时用的模型名
+  created_at  TEXT    NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_sms_phone      ON sms_codes (phone, created_at);
@@ -355,6 +523,9 @@ CREATE INDEX IF NOT EXISTS idx_preset_status  ON password_resets (status, id);
 CREATE INDEX IF NOT EXISTS idx_preset_account ON password_resets (account);
 CREATE INDEX IF NOT EXISTS idx_q_method       ON questions (method);
 CREATE INDEX IF NOT EXISTS idx_q_set          ON questions (set_id);
+CREATE INDEX IF NOT EXISTS idx_q_chapter      ON questions (chapter_id);
+CREATE INDEX IF NOT EXISTS idx_qset_series    ON question_sets (series_id, id);
+CREATE INDEX IF NOT EXISTS idx_chapter_set    ON question_chapters (set_id, id);
 CREATE INDEX IF NOT EXISTS idx_rec_user_time  ON answer_records (user_id, answered_at);
 CREATE INDEX IF NOT EXISTS idx_rec_user_q     ON answer_records (user_id, question_id);
 CREATE INDEX IF NOT EXISTS idx_rec_session    ON answer_records (session_id);
@@ -364,9 +535,18 @@ CREATE INDEX IF NOT EXISTS idx_exam_user      ON exams (user_id, id);
 CREATE INDEX IF NOT EXISTS idx_exam_ans_q     ON exam_answers (question_id);
 CREATE INDEX IF NOT EXISTS idx_qrep_status    ON question_reports (status, id);
 CREATE INDEX IF NOT EXISTS idx_mat_category   ON materials (category, id);
+CREATE INDEX IF NOT EXISTS idx_mat_series     ON materials (series_id, id);
+CREATE INDEX IF NOT EXISTS idx_series_cat     ON material_series (category, id);
 CREATE INDEX IF NOT EXISTS idx_mat_view       ON material_views (material_id, id);
 CREATE INDEX IF NOT EXISTS idx_mat_fav_user   ON material_favorites (user_id, material_id);
 CREATE INDEX IF NOT EXISTS idx_mat_cmt        ON material_comments (material_id, id);
+CREATE INDEX IF NOT EXISTS idx_music_order    ON music_tracks (sort_order DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_music_album    ON music_tracks (album_id, sort_order DESC);
+CREATE INDEX IF NOT EXISTS idx_music_albums   ON music_albums (sort_order DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_music_play     ON music_plays (user_id, track_id, played_at);
+CREATE INDEX IF NOT EXISTS idx_music_fav_user ON music_favorites (user_id, track_id);
+CREATE INDEX IF NOT EXISTS idx_music_cmt      ON music_comments (track_id, id);
+CREATE INDEX IF NOT EXISTS idx_theme_order    ON themes (sort_order DESC, id DESC);
 """
 
 
@@ -434,6 +614,20 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "questions": {
             # 老库补 set_id 列（NULL = 内置一级题库）
             "set_id": "INTEGER",
+            # 所属题库章节（NULL = 未归章节）；老库补列后既有题目全为 NULL，按老口径（topic1 分组）照常显示
+            "chapter_id": "INTEGER",
+            # 解答过程（「题目原题讲解」）：老库补列后既有题目全为 ''，考生端会自动退化成 AI 生成
+            "explanation": "TEXT NOT NULL DEFAULT ''",
+        },
+        "question_sets": {
+            # 方向/类型（'' 通用 / UT / RT / MT / PT / ET / VT / 综合）；老库补列后既有题库全为 ''，符合预期
+            "method": "TEXT NOT NULL DEFAULT ''",
+            # 所属题库系列（NULL = 散题库）
+            "series_id": "INTEGER",
+            # 题库封面磁盘随机文件名（'' = 考生端图标水印）
+            "cover_name": "TEXT NOT NULL DEFAULT ''",
+            # 管理端上移/下移排定的顺序（0 = 未排过按 id 倒序兜底）
+            "sort_order": "INTEGER NOT NULL DEFAULT 0",
         },
         "admin_accounts": {
             "real_name": "TEXT NOT NULL DEFAULT ''",
@@ -473,6 +667,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "materials": {
             # 管理员为视频/资料自定义封面（空 = 考生端自动取视频首帧）
             "cover_name": "TEXT NOT NULL DEFAULT ''",
+            # 所属系列（NULL = 散资料）；老库补列后既有资料全为 NULL，符合预期
+            "series_id": "INTEGER",
+            # 管理端「上移/下移」排定的顺序（0 = 未排过，此时按 id 倒序兜底）
+            "sort_order": "INTEGER NOT NULL DEFAULT 0",
+        },
+        "material_series": {
+            # 管理端「上移/下移」排定的顺序（0 = 未排过，此时按 id 倒序兜底）
+            "sort_order": "INTEGER NOT NULL DEFAULT 0",
         },
         "material_comments": {
             # 楼中楼：0 = 顶层评论；>0 = 所属根评论 id；reply_to = 被回复人昵称快照
@@ -482,6 +684,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "material_views": {
             # 观看历史里被考生移除的记录（隐藏标记，不删行 → 播放量不变）
             "hidden": "INTEGER NOT NULL DEFAULT 0",
+        },
+        "music_tracks": {
+            # 所属专辑（NULL = 未归专辑）；老库补列后既有歌曲全为 NULL，符合预期
+            "album_id": "INTEGER",
         },
     }
     for table, cols in patches.items():
@@ -497,6 +703,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
 
 # app_meta 里的标记键名（改键名等于让补齐重跑，注意后果）
 META_PROFILE_DEFAULTS = "profile_defaults_backfilled"
+# 通知删除语义升级（只隐藏后台记录 → 后台 + 考生端一起删）之前留下的残留，清一次
+META_NOTIFY_HIDDEN = "notify_hidden_batches_cleaned"
 
 
 def _backfill_profile_defaults(conn: sqlite3.Connection) -> int:
@@ -534,6 +742,30 @@ def _backfill_profile_defaults(conn: sqlite3.Connection) -> int:
     return changed
 
 
+def _backfill_notify_hidden_batches(conn: sqlite3.Connection) -> int:
+    """清掉「后台已删、考生端还留着」的历史通知，只跑一次。
+
+    早期版本的「删除发送记录」只把 notification_batches.hidden 置 1，考生端那份
+    通知（notifications.deleted 仍是 0）会一直躺在通知中心 —— 尤其是系统通知，
+    考生自己删不掉（403），于是出现「后台已经删光了、考生端还在」的现象。
+
+    现在删除是两边一起删（见 modules/notifications.py 的 delete_batch），
+    这里把改版之前留下的残留一次性抹平：批次已隐藏 → 它下面的考生通知一并标记删除。
+    用 app_meta 打标记，跑过就不再跑（跑第二遍也不会有行受影响，但没必要反复扫表）。
+    返回处理的条数。
+    """
+    if get_meta(conn, META_NOTIFY_HIDDEN) == "1":
+        return 0
+
+    cursor = conn.execute(
+        """UPDATE notifications SET deleted = 1
+           WHERE deleted = 0
+             AND batch_id IN (SELECT id FROM notification_batches WHERE hidden = 1)"""
+    )
+    set_meta(conn, META_NOTIFY_HIDDEN, "1")
+    return cursor.rowcount or 0
+
+
 def init_db() -> str:
     """
     建表 + 首次运行创建默认超级管理员 + 跑一次性数据补齐。
@@ -556,6 +788,11 @@ def init_db() -> str:
         backfilled = _backfill_profile_defaults(conn)
         if backfilled:
             notes.append(f"已为 {backfilled} 个历史考生账号补上随机昵称与头像")
+
+        # 一次性：清掉「后台已删除、考生端还留着」的历史通知（只跑一次）
+        cleaned = _backfill_notify_hidden_batches(conn)
+        if cleaned:
+            notes.append(f"已清掉 {cleaned} 条后台已删除、考生端残留的历史通知")
 
         existing = conn.execute("SELECT COUNT(*) AS n FROM admin_accounts").fetchone()["n"]
         if existing == 0:

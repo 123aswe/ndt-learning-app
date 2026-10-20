@@ -10,3 +10,5 @@ fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 python-multipart>=0.0.9
 tencentcloud-sdk-python-sms>=3.0.1200
+comtypes==1.4.17  # Office 文档转 PDF（office_convert_worker 调 COM 用）
+pikepdf>=10.0  # PDF 按页切片（pdf_slice.py，单页翻阅模式用）

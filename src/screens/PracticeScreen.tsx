@@ -5,6 +5,12 @@ import {
   GridIcon, TrashIcon, FlagIcon,
 } from '../components/icons'
 import { QuestionReportSheet } from '../components/QuestionReportSheet'
+import { AiExplainPanel } from '../components/AiExplainPanel'
+import { QuestionSolutionPanel } from '../components/QuestionSolutionPanel'
+import { RichText } from '../components/RichText'
+import { stripRichText } from '../data/richText'
+import { QTYPE_LABELS, answersMatch, normalizeMultiAnswer } from '../data/qtypes'
+import { useSoftKeyboard } from '../hooks/useSoftKeyboard'
 
 /* ============================================================
    答题页（苹果式浅色）
@@ -42,17 +48,20 @@ function formatTime(s: number) {
   return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
 }
 
-/** 题目类型标签：判断题 / 选择题 / 计算题 / 简答题（代码与后端 QTYPE_NAMES 一致） */
+/** 题目类型标签：判断 / 选择 / 多选 / 计算 / 计算选择 / 简答（代码与后端 QTYPE_NAMES 一致） */
 function qtypeLabel(q: BankQuestion): string {
-  if (q.qtype === 'judge') return '判断题'
-  if (q.qtype === 'calc') return '计算题'
-  if (q.qtype === 'short') return '简答题'
-  return '选择题'
+  return QTYPE_LABELS[q.qtype] || '选择题'
 }
 
 /** 简答题 / 无选项题：展示参考答案后由考生自评 */
 function isSelfAssess(q: BankQuestion): boolean {
   return q.qtype === 'short' || !q.options || q.options.length === 0
+}
+
+/** 无选项的计算题：给一个答案输入框，考生先写自己的答案，
+ *  提交后系统判分并出现折叠的「题目原题讲解」（解答过程来自题库，题库没配才用 AI） */
+function isCalcInput(q: BankQuestion): boolean {
+  return q.qtype === 'calc' && (!q.options || q.options.length === 0)
 }
 
 export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, setId, title, onExit, onComplete }: PracticeScreenProps) {
@@ -90,7 +99,6 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
   const [elapsedSeconds, setElapsedSeconds] = useState(0)
   const [showExitModal, setShowExitModal] = useState(false)
   const [isFavorited, setIsFavorited] = useState(false)
-  const [questionVisible, setQuestionVisible] = useState(true)
   const [submitting, setSubmitting] = useState(false)
   /** 交卷只执行一次（查看结果 / 退出两条路径共用） */
   const submittedRef = useRef(false)
@@ -106,9 +114,14 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
   const [showReport, setShowReport] = useState(false)
   /** 简答题：是否已展开参考答案 */
   const [shortRevealed, setShortRevealed] = useState(false)
+  /** 计算题：考生正在输入框里写的答案（提交后写进 sessionStates，切题会被还原） */
+  const [calcDraft, setCalcDraft] = useState('')
   /** 清除本组记录的两步确认 */
   const [confirmClear, setConfirmClear] = useState(false)
   const [clearing, setClearing] = useState(false)
+  /** v1.85 软键盘弹出（在计算题答案框里打字）时收起底部「上一题 / 下一题」操作条，
+      屏幕上只留输入框和键盘；收起键盘后自动恢复 */
+  const softKeyboard = useSoftKeyboard()
 
   /* ── 练习进度（续做） ── */
   /** 进度是否已加载完成（加载完成前不保存，避免用空状态覆盖服务器进度） */
@@ -170,6 +183,7 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
             const s = restored[idx]
             setSelected(s ? s.selected : null)
             setAnswerState(s ? (s.correct ? 'correct' : 'wrong') : null)
+            setCalcDraft(s && isCalcInput(questions[idx]) ? s.selected : '')
             setShortRevealed(Boolean(s) && isSelfAssess(questions[idx]))
             setShowExplanation(Boolean(s))
           }
@@ -233,9 +247,19 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
 
   const handleSelect = useCallback((key: string) => {
     if (answerState !== null || !currentQ) return
+    // 多选题：点击是「勾选 / 取消勾选」，选好后由底部「提交答案」统一判分
+    if (currentQ.qtype === 'multi') {
+      setSelected(prev => {
+        const cur = prev || ''
+        return cur.includes(key)
+          ? cur.replace(key, '')
+          : normalizeMultiAnswer(cur + key)
+      })
+      return
+    }
     setSelected(key)
 
-    const isCorrect = key === currentQ.answer
+    const isCorrect = answersMatch(currentQ.qtype, key, currentQ.answer)
     setAnswerState(isCorrect ? 'correct' : 'wrong')
     setSessionStates(prev => ({
       ...prev,
@@ -245,25 +269,35 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
     setTimeout(() => setShowExplanation(true), 600)
   }, [answerState, currentQ, currentIndex])
 
-  /** 切到指定题目：做过的还原「当时选的选项 + 判定结果」，没做过的从新开始 */
+  /** 多选题提交：按字母集合判分（选了 AC 而答案是 CA 也算对） */
+  const handleSubmitMulti = useCallback(() => {
+    if (answerState !== null || !currentQ || !selected) return
+    const isCorrect = answersMatch('multi', selected, currentQ.answer)
+    setAnswerState(isCorrect ? 'correct' : 'wrong')
+    setSessionStates(prev => ({
+      ...prev,
+      [currentIndex]: { selected: normalizeMultiAnswer(selected), correct: isCorrect },
+    }))
+    setTimeout(() => setShowExplanation(true), 600)
+  }, [answerState, currentQ, currentIndex, selected])
+
+  /** 切到指定题目：做过的还原「当时选的选项 + 判定结果」，没做过的从新开始。
+   *  原地直接换题（不做先淡出再淡入的弹出式过渡），内容即刻更换。 */
   const goTo = useCallback((index: number, closeNav = false) => {
     if (index < 0 || index >= total) return
     if (index === currentIndex) {
       if (closeNav) setShowNavigator(false)
       return
     }
-    setQuestionVisible(false)
-    setTimeout(() => {
-      setCurrentIndex(index)
-      const s = sessionStates[index]
-      setSelected(s ? s.selected : null)
-      setAnswerState(s ? (s.correct ? 'correct' : 'wrong') : null)
-      setShortRevealed(Boolean(s) && isSelfAssess(questions[index]))
-      setShowExplanation(Boolean(s))
-      setIsFavorited(false)
-      setQuestionVisible(true)
-      if (closeNav) setShowNavigator(false)
-    }, 180)
+    setCurrentIndex(index)
+    const s = sessionStates[index]
+    setSelected(s ? s.selected : null)
+    setAnswerState(s ? (s.correct ? 'correct' : 'wrong') : null)
+    setCalcDraft(s && isCalcInput(questions[index]) ? s.selected : '')
+    setShortRevealed(Boolean(s) && isSelfAssess(questions[index]))
+    setShowExplanation(Boolean(s))
+    setIsFavorited(false)
+    if (closeNav) setShowNavigator(false)
   }, [currentIndex, total, sessionStates, questions])
 
   /** 上一题：回到前一题，做过的会还原当时选的选项 */
@@ -282,6 +316,21 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
     }
     goTo(currentIndex + 1)
   }, [currentIndex, total, correctCount, elapsedSeconds, onComplete, submitAnswers, goTo])
+
+  /** 计算题提交：判分口径与考试完全一致（忽略首尾空白与大小写），
+   *  提交后即可展开「题目原题讲解」看解答过程 */
+  const handleSubmitCalc = useCallback(() => {
+    if (answerState !== null || !currentQ) return
+    const text = calcDraft.trim()
+    if (!text) return
+    const isCorrect = answersMatch('calc', text, currentQ.answer)
+    setSelected(text)
+    setAnswerState(isCorrect ? 'correct' : 'wrong')
+    setSessionStates(prev => ({
+      ...prev,
+      [currentIndex]: { selected: text, correct: isCorrect },
+    }))
+  }, [answerState, currentQ, currentIndex, calcDraft])
 
   /** 简答题自评：对照参考答案后自己判定对错 */
   const handleSelfAssess = useCallback((selfCorrect: boolean) => {
@@ -319,6 +368,7 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
         setSessionStates({})
         setSelected(null)
         setAnswerState(null)
+        setCalcDraft('')
         setShortRevealed(false)
         setShowExplanation(false)
         setCurrentIndex(0)
@@ -398,21 +448,40 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
     correct: { bg: 'var(--ok-weak)', border: 'var(--ok-border)', text: 'var(--ok)' },
     wrong:   { bg: 'var(--err-weak)', border: 'var(--err-border)', text: 'var(--err)' },
     reveal:  { bg: 'rgba(111,163,124,0.20)', border: 'var(--ok-border)', text: 'var(--ok)' },
+    picked:  { bg: 'var(--accent-weak)', border: 'var(--accent-border)', text: 'var(--accent)' },
     default: { bg: 'var(--chip-bg-soft)', border: 'var(--inset-hi)', text: 'var(--text-1)' },
     dimmed:  { bg: 'var(--chip-bg-soft)', border: 'var(--inset-hi)', text: 'var(--text-3)' },
   }
 
+  /** 我选的选项字母（多选题是 'AC' 这种串，单选/判断是单字母） */
+  const selectedKeys = selected || ''
+  /** 正确答案的选项字母集合（多选题含多个字母） */
+  const answerKeys = currentQ.answer || ''
+
   function getOptionStyle(key: string) {
-    if (!answerState) return optionColors.default
-    if (key === currentQ!.answer) return optionColors.correct
-    if (key === selected && answerState === 'wrong') return optionColors.wrong
+    if (!answerState) {
+      // 多选未提交：已勾选的选项高亮（单选/判断没选之前都是常态样式）
+      return selectedKeys.includes(key) ? optionColors.picked : optionColors.default
+    }
+    // 答错：我先错选的标红；正确答案（多选可能多个）一律标绿；其余置灰
+    if (answerState === 'wrong' && selectedKeys.includes(key) && !answerKeys.includes(key)) {
+      return optionColors.wrong
+    }
+    if (answerKeys.includes(key)) return optionColors.correct
     return optionColors.dimmed
   }
 
   function getOptionIcon(key: string): React.ReactNode | null {
-    if (!answerState) return null
-    if (key === currentQ!.answer) return <CheckIcon size={12} strokeWidth={2.4} />
-    if (key === selected && answerState === 'wrong') return <XIcon size={12} strokeWidth={2.4} />
+    if (!answerState) {
+      // 多选题勾选态给个对勾反馈，单选/判断未作答不显示图标
+      return currentQ!.qtype === 'multi' && selectedKeys.includes(key)
+        ? <CheckIcon size={12} strokeWidth={2.4} />
+        : null
+    }
+    if (answerState === 'wrong' && selectedKeys.includes(key) && !answerKeys.includes(key)) {
+      return <XIcon size={12} strokeWidth={2.4} />
+    }
+    if (answerKeys.includes(key)) return <CheckIcon size={12} strokeWidth={2.4} />
     return null
   }
 
@@ -421,7 +490,14 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
   const modeLabel = mode === 'wrong' ? '错题重练' : mode === 'random' ? '随机刷题' : ''
   const rangeLabel = title || (topic ? `${categoryId} · ${topic}` : categoryId)
   const scopeLabel = [modeLabel, rangeLabel].filter(Boolean).join(' · ')
-  const selfAssess = isSelfAssess(currentQ)
+  /** 无选项计算题：独立分支（输入框作答 → 判分 → 折叠「题目原题讲解」） */
+  const calcInput = isCalcInput(currentQ)
+  /** 需要「对照参考答案自评」的题：简答题等（计算题已单独走 calcInput 分支） */
+  const selfAssess = !calcInput && isSelfAssess(currentQ)
+  /** 多选题：点选项是勾选，选完由「提交答案」统一判分 */
+  const isMulti = currentQ.qtype === 'multi'
+  /** 题库里配置的解答过程（「题目原题讲解」内容；空 = 考生端由 AI 生成） */
+  const solutionText = (currentQ as BankQuestion & { explanation?: string }).explanation
 
   return (
     <div className="app-shell flex flex-col bg-page" style={{ height: '100dvh', overflow: 'hidden' }}>
@@ -483,10 +559,8 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
 
       {/* ── 可滚动内容 ── */}
       <div className="flex-1 overflow-y-auto px-4" style={{ overscrollBehavior: 'contain' }}>
-        {/* 题目卡片 */}
-        <div
-          className={`card p-5 mb-4 transition-all duration-200 ${questionVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-2'}`}
-        >
+        {/* 题目卡片（切题时原地直接更换，无过渡动画） */}
+        <div className="card p-5 mb-4">
           <div className="flex items-center gap-2 mb-3 flex-wrap">
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-weak)', color: 'var(--accent)' }}>
               {qtypeLabel(currentQ)}
@@ -502,9 +576,69 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
             className="text-base leading-relaxed font-medium"
             style={{ color: 'var(--text-1)', letterSpacing: '-0.005em' }}
           >
-            {currentQ.content}
+            <RichText text={currentQ.content} />
           </p>
         </div>
+
+        {/* ── 计算题（无选项）：先输入自己的答案，提交后判分并出现折叠的「题目原题讲解」 ── */}
+        {calcInput && (
+          <div className="mb-4">
+            {!answerState && (
+              <div className="card p-4">
+                <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-3)' }}>我的答案</p>
+                <textarea
+                  value={calcDraft}
+                  onChange={e => setCalcDraft(e.target.value)}
+                  rows={2}
+                  maxLength={200}
+                  placeholder="写下你算出的答案（数值或文字，带单位也可以）"
+                  className="w-full rounded-xl px-3 py-2.5 text-sm outline-none resize-none"
+                  style={{ background: 'var(--field-bg)', border: '1px solid var(--line)', color: 'var(--text-1)' }}
+                />
+                <button
+                  onClick={handleSubmitCalc}
+                  disabled={!calcDraft.trim()}
+                  className="w-full h-12 mt-3 gb gb-primary gb-lg rounded-2xl text-sm font-semibold"
+                  style={calcDraft.trim() ? undefined : { opacity: 0.45 }}
+                >
+                  提交答案
+                </button>
+                <p className="text-[10px] mt-2 text-center" style={{ color: 'var(--text-3)' }}>
+                  提交后自动判分，并在「题目原题讲解」里给出解答过程
+                </p>
+              </div>
+            )}
+
+            {answerState && (
+              <>
+                <div
+                  className="card p-4 mb-3 anim-slide-up"
+                  style={{ borderTop: `3px solid ${answerState === 'correct' ? 'var(--ok)' : 'var(--err)'}` }}
+                >
+                  <div className="flex items-center gap-2">
+                    {answerState === 'correct'
+                      ? <CheckIcon size={15} strokeWidth={2.4} color="var(--ok)" />
+                      : <XIcon size={15} strokeWidth={2.4} color="var(--err)" />}
+                    <span className="text-sm font-bold" style={{ color: answerState === 'correct' ? 'var(--ok)' : 'var(--err)' }}>
+                      {answerState === 'correct' ? '回答正确' : '回答错误'}
+                    </span>
+                  </div>
+                  <p className="text-xs mt-2" style={{ color: 'var(--text-3)' }}>
+                    我的答案：<span style={{ color: 'var(--text-2)' }}>{selected}</span>
+                  </p>
+                </div>
+
+                {/* 题目原题讲解：默认折叠，点标题栏展开。
+                    题库配了解答过程就直接显示，没配则由 AI 分步生成（附「不一定正确」提示） */}
+                <QuestionSolutionPanel
+                  questionId={currentQ.id}
+                  answer={currentQ.answer}
+                  explanation={solutionText}
+                />
+              </>
+            )}
+          </div>
+        )}
 
         {/* ── 选项（简答题：查看参考答案 + 自评） ── */}
         {selfAssess ? (
@@ -524,7 +658,7 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                 <div className="card p-4 mb-3">
                   <p className="text-xs font-medium mb-2" style={{ color: 'var(--text-3)' }}>参考答案</p>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-1)' }}>
-                    {currentQ.answer}
+                    <RichText text={currentQ.answer} />
                   </p>
                 </div>
                 <p className="text-xs text-center mb-3" style={{ color: 'var(--text-2)' }}>对照参考答案，你的作答算对还是错？</p>
@@ -564,8 +698,15 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                 </div>
                 <p className="text-xs font-medium mb-1" style={{ color: 'var(--text-3)' }}>参考答案</p>
                 <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: 'var(--text-2)' }}>
-                  {currentQ.answer}
+                  <RichText text={currentQ.answer} />
                 </p>
+              </div>
+            )}
+
+            {/* AI 解析：简答题自评后同样可用（让 AI 讲清答题要点） */}
+            {answerState && (
+              <div className="mt-3">
+                <AiExplainPanel questionId={currentQ.id} />
               </div>
             )}
           </div>
@@ -586,13 +727,14 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                 <div
                   className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
                   style={{
-                    background: isAnswered
-                      ? opt.key === currentQ.answer
+                    background:
+                      answerState === null
+                        ? 'var(--track)'
+                        : answerKeys.includes(opt.key)
                         ? 'var(--ok-weak)'
-                        : opt.key === selected && answerState === 'wrong'
+                        : answerState === 'wrong' && selectedKeys.includes(opt.key)
                         ? 'var(--err-weak)'
-                        : 'var(--track)'
-                      : 'var(--track)',
+                        : 'var(--track)',
                     color: style.text,
                   }}
                 >
@@ -600,7 +742,7 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                 </div>
 
                 <p className="text-sm leading-relaxed flex-1" style={{ color: style.text }}>
-                  {opt.text}
+                  <RichText text={opt.text} noZoom />
                 </p>
               </div>
             )
@@ -608,8 +750,8 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
         </div>
         )}
 
-        {/* ── 判定结果面板（选择/判断题；简答题已在上方展示参考答案） ── */}
-        {showExplanation && !selfAssess && (
+        {/* ── 判定结果面板（选择/判断题；简答题与计算题已在上方单独呈现） ── */}
+        {showExplanation && !selfAssess && !calcInput && (
           <div className="mb-4 anim-slide-up">
             <div
               className="card overflow-hidden"
@@ -633,7 +775,7 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                     <div className="text-xs mt-0.5" style={{ color: 'var(--text-2)' }}>
                       正确答案：<span className="font-bold" style={{ color: 'var(--ok)' }}>{currentQ.answer}</span>
                       <span className="ml-2" style={{ color: 'var(--text-3)' }}>
-                        {currentQ.options.find(o => o.key === currentQ.answer)?.text}
+                        {currentQ.options.filter(o => answerKeys.includes(o.key)).map(o => stripRichText(o.text)).join(' / ')}
                       </span>
                     </div>
                   )}
@@ -644,7 +786,7 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                 <div className="px-5 py-4">
                   <p className="text-xs font-medium mb-2 tracking-wide" style={{ color: 'var(--text-3)' }}>解析</p>
                   <p className="text-sm leading-relaxed" style={{ color: 'var(--text-2)' }}>
-                    {(currentQ as BankQuestion & { explanation?: string }).explanation}
+                    <RichText text={(currentQ as BankQuestion & { explanation?: string }).explanation} />
                   </p>
                 </div>
               )}
@@ -660,13 +802,19 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
                 )}
               </div>
             </div>
+
+            {/* AI 解析：本题作答结果下方，点一下让 AI 讲透这道题 */}
+            <div className="mt-3">
+              <AiExplainPanel questionId={currentQ.id} />
+            </div>
           </div>
         )}
 
         <div className="h-24" />
       </div>
 
-      {/* ── 底部操作条：上一题 / 下一题 ── */}
+      {/* ── 底部操作条：上一题 / 下一题（v1.85：软键盘弹出时整条收起，只留键盘） ── */}
+      {!softKeyboard && (
       <div
         className="px-4 pt-3 pb-8"
         style={{
@@ -681,11 +829,17 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
           <div className="flex items-center justify-center gap-2 mb-2.5">
             <div className="w-1.5 h-1.5 rounded-full dot-pulse" style={{ background: 'var(--accent)' }} />
             <span className="text-xs" style={{ color: 'var(--text-3)' }}>
-              {selfAssess ? '先作答，再对照参考答案' : '选择一个答案后自动判对错'}
+              {calcInput
+                ? '计算题：写下你的答案后点「提交答案」，系统自动判分'
+                : selfAssess
+                ? '先作答，再对照参考答案'
+                : isMulti
+                ? `多选题：可选多个，选好后点「提交答案」${selectedKeys ? `（已选 ${selectedKeys}）` : ''}`
+                : '选择一个答案后自动判对错'}
             </span>
           </div>
         )}
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <button
             onClick={handlePrev}
             disabled={currentIndex === 0}
@@ -695,16 +849,32 @@ export function PracticeScreen({ categoryId, topic, mode = 'sequential', qtype, 
             <ChevronLeftIcon size={17} color="var(--text-2)" />
             上一题
           </button>
+          {/* 多选题：选完再点「提交答案」判分（单选/判断题点选项即判分，不需要这一步） */}
+          {isMulti && !answerState && (
+            <button
+              onClick={handleSubmitMulti}
+              disabled={!selectedKeys}
+              className="gb gb-primary gb-lg h-[52px] flex-1 flex items-center justify-center font-semibold text-sm"
+              style={selectedKeys ? undefined : { opacity: 0.45 }}
+            >
+              提交答案
+            </button>
+          )}
           <button
             onClick={handleNext}
             disabled={submitting}
             className="gb gb-success gb-lg h-[52px] flex-1 flex items-center justify-center gap-2 font-semibold text-base"
           >
-            {currentIndex + 1 >= total ? (submitting ? '正在保存…' : '查看结果') : '下一题'}
-            {!(currentIndex + 1 >= total && submitting) && <ChevronRightIcon size={18} color="#FFFFFF" />}
+            {currentIndex + 1 >= total
+              ? (submitting ? '正在保存…' : '查看结果')
+              : ((isMulti || calcInput) && !answerState ? '跳过' : '下一题')}
+            {!(currentIndex + 1 >= total && submitting) && !((isMulti || calcInput) && !answerState) && (
+              <ChevronRightIcon size={18} color="#FFFFFF" />
+            )}
           </button>
         </div>
       </div>
+      )}
 
       {/* ── 题目导航面板 ── */}
       {showNavigator && (

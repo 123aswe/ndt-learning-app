@@ -6,6 +6,7 @@ import { useProfile } from '../hooks/useProfile'
 import { useNotifications } from '../hooks/useNotifications'
 import { useHomeData } from '../hooks/useHomeData'
 import { studyReminderOn, reviewReminderOn } from '../data/notifyPrefs'
+import { stripRichText } from '../data/richText'
 import {
   BellIcon, SearchIcon, PlayIcon, ShuffleIcon, ClipboardIcon, RefreshIcon,
   TargetIcon, PencilIcon, ClockIcon, FlameIcon, ChevronRightIcon, CheckIcon, PercentIcon,
@@ -452,7 +453,7 @@ export function HomeScreen({ onNavigate, onStartPractice }: HomeScreenProps) {
                       {record.method}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-2)' }}>{record.content}</p>
+                      <p className="text-xs leading-relaxed line-clamp-2" style={{ color: 'var(--text-2)' }}>{stripRichText(record.content)}</p>
                       <div className="flex items-center gap-3 mt-2">
                         <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>错误 {record.wrong_count} 次</span>
                         <span className="text-[10px]" style={{ color: 'var(--text-3)' }}>{record.topic}</span>

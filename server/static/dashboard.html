@@ -4,21 +4,72 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>管理后台 · NDT-劳人</title>
+  <link rel="icon" type="image/jpeg" href="/site-assets/logo.jpg" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <!-- 管理后台主界面：五个 Tab（管理员账号 / 注册申请 / 考生账号 / 密码重置 / 通知管理），各自增删查改 -->
+  <!-- 管理后台主界面：十个 Tab（管理员账号 / 注册申请 / 考生账号 / 密码重置 / 通知管理
+       / 题库管理 / 资料库 / 音乐 / 纠错工单 / 版本发布），各自增删查改 -->
   <div class="topbar">
+    <img class="topbar-logo" src="/site-assets/logo.jpg" alt="NDT-劳人" />
     <h1>NDT-劳人 管理后台</h1>
     <span id="mode-pill" class="mode-pill">读取中…</span>
     <div class="spacer"></div>
     <span class="who" id="who"></span>
+    <button class="btn btn-sm" id="btn-open-site" title="在新标签页打开官网">官网</button>
     <button class="btn btn-sm" id="btn-change-pwd">修改我的密码</button>
     <button class="btn btn-sm" id="btn-logout">退出登录</button>
   </div>
 
   <div class="wrap">
-    <!-- 顶部提示（腾讯云短信未配置 / 有待审核注册申请） -->
+    <!-- 顶部提示（短信模式 / 公网地址 / 待审核注册申请） -->
+    <div id="tunnel-banner" class="tunnel-banner hidden">
+      <div class="tb-main">
+        <span class="tb-title" id="tunnel-state">公网访问</span>
+        <a id="tunnel-url" class="tb-url" href="#" target="_blank" rel="noopener"></a>
+        <span class="tb-time" id="tunnel-time"></span>
+      </div>
+      <div class="tb-actions">
+        <button class="btn btn-sm" id="tunnel-copy">复制考生端地址</button>
+        <button class="btn btn-sm" id="tunnel-refresh">刷新</button>
+      </div>
+    </div>
+    <!-- 网络访问（局域网开关 + 公网隧道一键启停，后端 modules/network.py） -->
+    <div id="net-card" class="card net-card">
+      <h3 class="card-title">网络访问</h3>
+      <p class="card-sub">局域网：同一 WiFi 直连访问，速度快；公网：隧道穿透，任何网络都能访问，但相对较慢。</p>
+
+      <div class="net-row">
+        <div class="net-main">
+          <div class="net-head">
+            <span class="net-name">局域网访问</span>
+            <span id="net-lan-state" class="net-state">…</span>
+          </div>
+          <div id="net-lan-urls" class="net-urls hidden">
+            <div class="net-url-line"><span class="net-url-label">考生端 App</span><a id="net-lan-app" target="_blank" rel="noopener"></a><button class="btn btn-sm" id="net-lan-copy-app">复制</button></div>
+            <div class="net-url-line"><span class="net-url-label">管理后台</span><a id="net-lan-admin" target="_blank" rel="noopener"></a><button class="btn btn-sm" id="net-lan-copy-admin">复制</button></div>
+            <div class="net-url-line"><span class="net-url-label">官网入口</span><a id="net-lan-site" target="_blank" rel="noopener"></a><button class="btn btn-sm" id="net-lan-copy-site">复制</button></div>
+          </div>
+          <div id="net-lan-tip" class="net-tip"></div>
+        </div>
+        <label class="switch" title="开关局域网访问">
+          <input type="checkbox" id="net-lan-switch" />
+          <span class="net-slider"></span>
+        </label>
+      </div>
+
+      <div class="net-row">
+        <div class="net-main">
+          <div class="net-head">
+            <span class="net-name">公网访问（Cloudflare 隧道）</span>
+            <span id="net-pub-state" class="net-state">…</span>
+          </div>
+          <div id="net-pub-tip" class="net-tip">启动后由隧道生成公网地址（每次启动都会变），地址显示在顶部横幅</div>
+        </div>
+        <button id="net-pub-btn" class="btn btn-primary btn-sm">一键启动</button>
+      </div>
+    </div>
+
     <div id="mode-alert" class="alert alert-warn hidden"></div>
     <div id="pending-alert" class="alert alert-info hidden"></div>
 
@@ -34,7 +85,10 @@
       <button class="tab" data-panel="notifications">通知管理</button>
       <button class="tab" data-panel="questionsets">题库管理</button>
       <button class="tab" data-panel="materials">资料库</button>
+      <button class="tab" data-panel="music">音乐</button>
+      <button class="tab" data-panel="themes">主题商店</button>
       <button class="tab" data-panel="reports">纠错工单 <span id="report-dot" class="badge badge-err hidden">0</span></button>
+      <button class="tab" data-panel="version">版本发布</button>
     </div>
 
     <!-- 面板：管理员账号 -->
@@ -55,7 +109,7 @@
           <button class="btn btn-primary" id="admins-create">+ 新增管理员</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
@@ -99,7 +153,7 @@
           <span class="card-sub" style="margin: 0;" id="regs-summary"></span>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
@@ -152,12 +206,12 @@
           <button class="btn btn-primary" id="users-create">+ 新增考生</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
                 <th>ID</th><th>账号</th><th>单位 / 学校</th><th>头像 / 昵称</th><th>姓名</th><th>方向</th>
-                <th>状态</th><th>最近登录</th><th>操作</th>
+                <th>状态</th><th>在线</th><th>最近登录</th><th>操作</th>
               </tr>
             </thead>
             <tbody id="users-body"></tbody>
@@ -198,7 +252,7 @@
           <span class="card-sub" style="margin: 0;" id="resets-summary"></span>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
@@ -284,8 +338,8 @@
 
       <div class="card">
         <h2 class="card-title">已发送记录</h2>
-        <p class="card-sub">最近发送的通知（同一次发送计为一条记录）。删除记录不会影响考生已收到的通知。</p>
-        <div class="table-wrap">
+        <p class="card-sub">最近发送的通知（同一次发送计为一条记录）。删除会连同考生端已收到的通知一起删掉，请谨慎操作。</p>
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr><th>类型</th><th>接收对象</th><th>标题</th><th>内容</th><th>发送人</th><th>发送时间</th><th>操作</th></tr>
@@ -302,34 +356,96 @@
       </div>
     </section>
 
-    <!-- 面板：题库管理（自定义题库：建库 → 按题型放题 → 考生端动态获取） -->
+    <!-- 面板：题库管理（三层：题库系列 → 题库 → 章节；题库/系列都可上传封面） -->
     <section id="panel-questionsets" class="hidden">
       <div class="card">
-        <h2 class="card-title">题库管理</h2>
+        <h2 class="card-title">题库系列</h2>
         <p class="card-sub">
-          在这里创建题库（如「二级 UT 题库」）并上传题目，题目按<strong>选择题 / 判断题 / 计算题 / 简答题</strong>分类。
+          系列是题库页最外一层的分组（如「二级 UT 题库系列」），下面挂多套题库。
+          <strong>删除系列不会删除里面的题库</strong>，题库会退回「其他题库」，可以放心整理。
+        </p>
+
+        <div class="toolbar">
+          <select class="input" id="qss-method">
+            <option value="">全部方向</option>
+            <option value="UT">UT</option>
+            <option value="RT">RT</option>
+            <option value="MT">MT</option>
+            <option value="PT">PT</option>
+            <option value="ET">ET</option>
+            <option value="VT">VT</option>
+            <option value="综合">综合</option>
+          </select>
+          <select class="input" id="qss-level">
+            <option value="">全部级别</option>
+          </select>
+          <button class="btn" id="qss-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="qss-new">+ 新建题库系列</button>
+        </div>
+
+        <div class="table-wrap table-fixed">
+          <table>
+            <thead>
+              <tr>
+                <th>序号</th><th>系列名</th><th>级别</th><th>方向</th><th>简介</th>
+                <th>题库数</th><th>题数</th><th>封面</th><th>排序</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="qss-body"></tbody>
+          </table>
+          <div class="empty hidden" id="qss-empty">还没有题库系列，点右上角「新建题库系列」</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">题库</h2>
+        <p class="card-sub">
+          建库（可归入上面某个系列、上传封面）→ 在库里<strong>新建章节</strong> → 往章节里<strong>导入题目</strong>。
           保存后考生端 App「题库」页会动态出现这套题库；内置一级题库（UT / RT / MT / PT）不受影响。
         </p>
 
         <div class="toolbar">
+          <select class="input" id="qs-method">
+            <option value="">全部方向</option>
+            <option value="UT">UT</option>
+            <option value="RT">RT</option>
+            <option value="MT">MT</option>
+            <option value="PT">PT</option>
+            <option value="ET">ET</option>
+            <option value="VT">VT</option>
+            <option value="综合">综合</option>
+          </select>
+          <select class="input" id="qs-series">
+            <option value="">全部系列</option>
+          </select>
+          <input class="input" id="qs-q" placeholder="搜索题库名 / 描述" />
+          <button class="btn" id="qs-search">搜索</button>
           <button class="btn" id="qs-refresh">刷新</button>
+          <button class="btn" id="qs-restore-builtin"
+            title="把内置一级题库（UT / RT / MT / PT）还原成官方题库：清掉误导入进来的题、补回被删掉的官方原题（执行前自动备份数据库）">
+            恢复内置题库
+          </button>
           <div class="spacer"></div>
           <button class="btn btn-primary" id="qs-create">+ 新建题库</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
-                <th>ID</th><th>题库名称</th><th>级别</th><th>题数</th><th>题型分布</th>
-                <th>创建时间</th><th>操作</th>
+                <th>序号</th><th>题库名称</th><th>级别</th><th>方向</th><th>所属系列</th><th>章节</th><th>题数</th>
+                <th>题型分布</th><th>封面</th><th>排序</th><th>操作</th>
               </tr>
             </thead>
             <tbody id="qs-body"></tbody>
           </table>
           <div class="empty hidden" id="qs-empty">还没有自定义题库，点右上角「新建题库」创建</div>
         </div>
-        <p class="card-sub" style="margin-top:10px;">内置一级题库（UT / RT / MT / PT）也在列表里：可查看题目、增删改题、批量导入；题库本身不可改名或删除。</p>
+        <p class="card-sub" style="margin-top:10px;">
+          内置一级题库（UT / RT / MT / PT）也在列表里：可查看题目、增删改题、批量导入；
+          它们没有封面、不能排序、也不能建章节（章节按 CSV 的「知识点一」自动分）。
+        </p>
       </div>
     </section>
 
@@ -341,9 +457,53 @@
           在这里上传<strong>标准规范 / 教材 / 辅导资料 / 视频课程</strong>，保存后考生端 App「教材 / 视频」页会动态出现。
           文件保存在服务器 data/uploads/ 目录，标题与分类信息保存在数据库。<br />
           上传时可<strong>指定封面图</strong>（jpg / png / webp，≤8MB）；不指定的话，视频在考生端会自动取<strong>首帧</strong>作为封面。
-          列表里的<strong>播放量 / 收藏数 / 评论数</strong>来自考生端真实行为，点「评论」可查看并删除违规评论。
+          列表里的<strong>播放量 / 收藏数 / 评论数</strong>来自考生端真实行为，点「评论」可查看并删除违规评论。<br />
+          列表前面的<strong>序号</strong>按当前筛选结果实时编号；点<strong>排序</strong>列的 ↑ / ↓ 可以调整资料的展示顺序
+          （资料、视频、系列都支持，新上传的默认排在最前面），考生端顺序实时同步。
+        </p>
+      </div>
+
+      <!-- 系列管理：大类下面再分一层「系列」，考生端先看系列卡，点进来才是系列内的资料 -->
+      <div class="card">
+        <h2 class="card-title">资料系列</h2>
+        <p class="card-sub">
+          系列是<strong>大类下面的一层分组</strong>（例如「UT 培训视频合集」「2024 版标准合辑」）。
+          考生端「教材 / 视频」页会先把系列显示成卡片，点进去才是该系列里的全部资料。<br />
+          新建系列后，在上传/编辑资料时选择<strong>所属系列</strong>即可把资料放进去；
+          没有归入任何系列的资料会集中在考生端「其他资料 / 其他视频」里展示。<br />
+          <strong>删除系列不会删除里面的资料</strong>，这些资料会退回「其他」，可以放心整理。<br />
+          系列与资料列表前面的<strong>序号</strong>跟着当前筛选结果实时编号；点<strong>排序</strong>列的 ↑ / ↓
+          即可上移 / 下移，考生端「教材 / 视频」页的顺序会立刻跟着变（考生端还可在页面上切换顺序 / 倒序）。
         </p>
 
+        <div class="toolbar">
+          <select class="input" id="series-category">
+            <option value="">全部分类</option>
+            <option value="standard">标准规范</option>
+            <option value="textbook">教材</option>
+            <option value="material">辅导资料</option>
+            <option value="video">视频课程</option>
+          </select>
+          <button class="btn" id="series-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="series-new">+ 新建系列</button>
+        </div>
+
+        <div class="table-wrap table-fixed">
+          <table>
+            <thead>
+              <tr>
+                <th>序号</th><th>系列名</th><th>分类</th><th>方向</th><th>简介</th><th>资料数</th><th>封面</th><th>排序</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="series-body"></tbody>
+          </table>
+          <div class="empty hidden" id="series-empty">还没有系列，点右上角「新建系列」</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">资料列表</h2>
         <div class="toolbar">
           <select class="input" id="mats-category">
             <option value="">全部分类</option>
@@ -352,24 +512,139 @@
             <option value="material">辅导资料</option>
             <option value="video">视频课程</option>
           </select>
+          <select class="input" id="mats-method">
+            <option value="">全部方向</option>
+            <option value="UT">UT</option>
+            <option value="RT">RT</option>
+            <option value="MT">MT</option>
+            <option value="PT">PT</option>
+            <option value="ET">ET</option>
+            <option value="VT">VT</option>
+            <option value="综合">综合</option>
+          </select>
+          <select class="input" id="mats-series">
+            <option value="">全部系列</option>
+          </select>
           <input class="input" id="mats-q" placeholder="搜索标题 / 描述" />
           <button class="btn" id="mats-search">搜索</button>
           <button class="btn" id="mats-refresh">刷新</button>
+          <button class="btn" id="mats-slice" title="给还没切片的 PDF 补做按页切片，可反复点">补 PDF 切片</button>
+          <button class="btn" id="mats-convert" title="把 doc/ppt/pptx 转成可在线翻阅的 PDF（上传时已自动排队的会跳过，可反复点）">转 Office 预览</button>
           <div class="spacer"></div>
           <button class="btn btn-primary" id="mats-upload">+ 上传资料</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
-                <th>ID</th><th>标题</th><th>分类</th><th>方向</th><th>封面</th><th>文件</th><th>大小</th>
-                <th>播放量</th><th>收藏数</th><th>评论</th><th>上传时间</th><th>操作</th>
+                <th>序号</th><th>标题</th><th>分类</th><th>方向</th><th>所属系列</th><th>封面</th><th>文件</th><th>大小</th>
+                <th>播放量</th><th>收藏数</th><th>评论</th><th>上传时间</th><th>排序</th><th>操作</th>
               </tr>
             </thead>
             <tbody id="mats-body"></tbody>
           </table>
           <div class="empty hidden" id="mats-empty">还没有资料，点右上角「上传资料」</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：音乐（专辑管理 + 上传音频 + 封面 + 歌手 + 歌词 → 考生端「音乐」页在线播放） -->
+    <section id="panel-music" class="hidden">
+      <!-- 专辑管理：先建专辑，再把歌曲归入；考生端音乐页「专辑」Tab 展示 -->
+      <div class="card">
+        <h2 class="card-title">专辑</h2>
+        <p class="card-sub">
+          先创建<strong>专辑</strong>，再在下方「上传歌曲 / 编辑歌曲」时从「所属专辑」里选择归属。<br />
+          考生端音乐页顶部「专辑」Tab 会展示专辑卡片，点进去就是专辑内的歌曲；不上传专辑封面时，
+          考生端自动用专辑内第一首歌的封面兜底。<br />
+          <strong>删除专辑不会删除歌曲</strong>：专辑内的歌曲会退回「未归专辑」，仍可正常播放。
+        </p>
+
+        <div class="toolbar">
+          <button class="btn" id="album-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="album-create">+ 新建专辑</button>
+        </div>
+
+        <div class="table-wrap table-fixed">
+          <table>
+            <thead>
+              <tr>
+                <th>序号</th><th>封面</th><th>专辑名</th><th>简介</th><th>歌曲数</th><th>创建时间</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="album-body"></tbody>
+          </table>
+          <div class="empty hidden" id="album-empty">还没有专辑，点右上角「新建专辑」</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 class="card-title">音乐</h2>
+        <p class="card-sub">
+          在这里上传<strong>歌曲</strong>：音频文件 + 封面图 + 歌手名 + 歌词，保存后考生端 App「音乐」页即可<strong>在线播放</strong>
+          （真实音频播放，支持播放 / 暂停、上一曲 / 下一曲、拖动进度条，到点自动下一曲）。<br />
+          歌词支持<strong>纯文本</strong>（一行一句）或 <strong>LRC 时间轴格式</strong>：每行写成
+          <code>[00:12.34] 这一句歌词</code>，考生端会按时间<strong>逐行高亮滚动</strong>；写不出时间轴也没关系，
+          没有时间轴的歌词会整段滚动展示。<br />
+          音频支持 mp3 / m4a / wav / flac / ogg 等浏览器可直接播放的格式（单个文件 ≤200MB）；
+          封面支持 jpg / png / webp（≤8MB），不上传封面时考生端自动使用内置山水插画。
+        </p>
+
+        <div class="toolbar">
+          <input class="input" id="music-q" placeholder="搜索歌名 / 歌手 / 专辑" />
+          <button class="btn" id="music-search">搜索</button>
+          <button class="btn" id="music-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="music-upload">+ 上传歌曲</button>
+        </div>
+
+        <div class="table-wrap table-fixed">
+          <table>
+            <thead>
+              <tr>
+                <th>序号</th><th>封面</th><th>歌名</th><th>歌手</th><th>所属专辑</th><th>时长</th>
+                <th>大小</th><th>歌词</th><th>播放量</th><th>上传时间</th><th>排序</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="music-body"></tbody>
+          </table>
+          <div class="empty hidden" id="music-empty">还没有歌曲，点右上角「上传歌曲」</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：主题商店（上传「背景图 + 配色」皮肤 → 考生端「我的 → 主题商店」自选应用） -->
+    <section id="panel-themes" class="hidden">
+      <div class="card">
+        <h2 class="card-title">主题商店</h2>
+        <p class="card-sub">
+          在这里上传<strong>主题（皮肤）</strong>：一张背景图 + 主色 / 辅色 / 字色，考生在 App「我的 → 主题商店」里自选一个应用。<br />
+          应用后同时作用于<strong>登录 / 注册页</strong>与<strong>登录后的主界面</strong>：背景图按 <code>cover</code> 铺满（裁剪、不拉伸），
+          配色覆盖按钮 / 强调色 / 文字与卡片底色 —— <strong>只改颜色与背景、不动任何尺寸，界面不会变形</strong>。<br />
+          <strong>字色</strong>决定文字明暗基调：背景偏浅选「深色字」，背景偏深选「浅色字」；选反了会出现文字看不清。<br />
+          预览图只用于后台列表与考生端缩略图，不上传时考生端用主色 / 辅色渐变兜底；背景图支持 jpg / png / webp（≤15MB），
+          预览图同格式（≤8MB）。<strong>删除主题不影响其它主题</strong>；考生本机若正用着被删的主题，会自动恢复默认外观。
+        </p>
+
+        <div class="toolbar">
+          <button class="btn" id="theme-refresh">刷新</button>
+          <div class="spacer"></div>
+          <button class="btn btn-primary" id="theme-create">+ 上传主题</button>
+        </div>
+
+        <div class="table-wrap table-fixed">
+          <table>
+            <thead>
+              <tr>
+                <th>序号</th><th>预览</th><th>主题名</th><th>主色</th><th>辅色</th><th>字色</th>
+                <th>背景图</th><th>创建时间</th><th>排序</th><th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="theme-body"></tbody>
+          </table>
+          <div class="empty hidden" id="theme-empty">还没有主题，点右上角「上传主题」</div>
         </div>
       </div>
     </section>
@@ -394,7 +669,7 @@
           <button class="btn" id="rep-refresh">刷新</button>
         </div>
 
-        <div class="table-wrap">
+        <div class="table-wrap table-fixed">
           <table>
             <thead>
               <tr>
@@ -405,6 +680,57 @@
             <tbody id="rep-body"></tbody>
           </table>
           <div class="empty hidden" id="rep-empty">没有工单</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 面板：版本发布（改版本号 → 在线考生立刻收到更新提示，走实时通道） -->
+    <section id="panel-version" class="hidden">
+      <div class="card">
+        <h2 class="card-title">版本发布</h2>
+        <p class="card-sub">
+          在这里发布新版本，<strong>此刻正在使用 App 的考生会立刻收到更新提示</strong>（走实时通道推送，不用等轮询）。
+          普通版本弹<strong>可关闭</strong>的顶部提示条，「强制更新」弹<strong>不可关闭</strong>的更新弹层。<br />
+          网页版考生点「立即更新」= 刷新页面即拿新版（构建产物带内容哈希）；
+          如果还提供打包版 App，请填下面的<strong>安装包 / 下载地址</strong>，弹层里会多一个「下载新版本」按钮。
+        </p>
+
+        <div class="stats" id="ver-current"></div>
+
+        <div class="form-row" style="margin-top: 18px;">
+          <label>新版本号</label>
+          <input class="input" id="ver-number" placeholder="例如 1.1.0（主.次.修订，不要带 v 前缀）" />
+          <div class="hint">
+            只有比考生当前版本大才会提示。发布前请先改前端 src/data/appVersion.ts 的 APP_VERSION
+            并重新构建部署，否则考生刷新后拿到的还是旧版本。
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label>更新说明</label>
+          <textarea class="input" id="ver-notes"
+            placeholder="一行一条，例如：&#10;修复错题本偶发重复&#10;新增模拟考试倒计时提醒"></textarea>
+        </div>
+
+        <div class="form-row">
+          <label>安装包 / 下载地址</label>
+          <input class="input" id="ver-url" placeholder="选填；打包版 App 填安装包或下载页地址，纯网页版留空即可" />
+        </div>
+
+        <div class="form-row">
+          <label>更新方式</label>
+          <div class="radio-row" id="ver-force-row">
+            <button type="button" class="radio-chip on" data-force="0">普通版本（考生可稍后更新）</button>
+            <button type="button" class="radio-chip" data-force="1">强制更新（必须更新后才能继续用）</button>
+          </div>
+          <div class="hint">考生正在答题 / 考试时一律不打扰，交卷回到主界面后再提示。</div>
+        </div>
+
+        <div class="toolbar">
+          <button class="btn btn-primary" id="ver-publish">发布新版本</button>
+          <button class="btn" id="ver-refresh">刷新当前版本</button>
+          <div class="spacer"></div>
+          <span class="card-sub" style="margin: 0;" id="ver-result"></span>
         </div>
       </div>
     </section>
