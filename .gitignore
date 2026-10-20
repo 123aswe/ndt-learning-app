@@ -50,3 +50,7 @@ __pycache__/
 
 # ── 微信开发者工具私有配置（个人本地偏好，不提交）──────────
 miniprogram/project.private.config.json
+
+# ── AI 工作区（本地开发记忆与预览截图，不公开）──────────────────
+.workbuddy/
+
